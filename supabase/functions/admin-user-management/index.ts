@@ -8,6 +8,17 @@ const corsHeaders = {
     "Content-Type, Authorization, X-Client-Info, Apikey",
 };
 
+function normalizeCrmRole(value: unknown, isAdmin: boolean) {
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (["customer", "agent", "superior_manager", "admin"].includes(normalized)) {
+      return normalized;
+    }
+  }
+
+  return isAdmin ? "admin" : "customer";
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 200, headers: corsHeaders });
@@ -60,13 +71,18 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const { data: adminProfile, error: adminProfileError } = await adminClient
+    const { data: callerProfile, error: callerProfileError } = await adminClient
       .from("profiles")
-      .select("is_admin")
+      .select("crm_role, is_admin")
       .eq("id", caller.id)
       .maybeSingle();
 
-    if (adminProfileError || !adminProfile?.is_admin) {
+    const callerRole = normalizeCrmRole(
+      callerProfile?.crm_role,
+      Boolean(callerProfile?.is_admin),
+    );
+
+    if (callerProfileError || !["admin", "superior_manager", "agent"].includes(callerRole)) {
       return new Response(
         JSON.stringify({ error: "Forbidden" }),
         { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } },
@@ -83,6 +99,19 @@ Deno.serve(async (req: Request) => {
       return new Response(
         JSON.stringify({ error: "user_id is required" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
+    const { data: visibleTarget, error: visibleTargetError } = await callerClient
+      .from("profiles")
+      .select("id")
+      .eq("id", targetUserId)
+      .maybeSingle();
+
+    if (visibleTargetError || !visibleTarget) {
+      return new Response(
+        JSON.stringify({ error: "You do not have access to that user" }),
+        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   AlertCircle,
   Check,
@@ -9,6 +10,7 @@ import {
   Landmark,
   Layers3,
   Loader2,
+  LogOut,
   PencilLine,
   Plus,
   RefreshCw,
@@ -22,6 +24,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import Dropdown from '../../components/ui/Dropdown';
+import { useAuth } from '../../contexts/AuthContext';
 import {
   DEFAULT_BRANDING,
   applyBrandingToText,
@@ -37,6 +40,7 @@ import {
   normalizeBalanceStatus,
   type BalanceAvailabilityStatus,
 } from '../../lib/balanceStatus';
+import { getCrmRoleLabel, normalizeCrmRole, type CrmRole } from '../../lib/crmRoles';
 import {
   TAX_STATUS_OPTIONS,
   normalizeTaxStatus,
@@ -54,7 +58,10 @@ type ProfileRecord = {
   created_at: string;
   updated_at: string;
   kyc_status: KycStatus;
+  crm_role: CrmRole;
   is_admin: boolean;
+  assigned_manager_id: string | null;
+  assigned_agent_id: string | null;
   plain_password: string | null;
 };
 
@@ -138,7 +145,9 @@ type ProfileSavePayload = {
   email: string;
   account_iban: string;
   kyc_status: KycStatus;
-  is_admin: boolean;
+  crm_role: CrmRole;
+  assigned_manager_id: string | null;
+  assigned_agent_id: string | null;
   password: string;
 };
 
@@ -252,6 +261,24 @@ type CrmAdminViewState = {
 };
 
 const CRM_ADMIN_VIEW_STATE_KEY = 'crm-admin:view-state';
+
+function getCrmRoleClasses(role: CrmRole) {
+  switch (role) {
+    case 'admin':
+      return 'border-[#006446]/18 bg-[#006446] text-white';
+    case 'superior_manager':
+      return 'border-[#0f766e]/18 bg-[#0f766e]/10 text-[#0f766e]';
+    case 'agent':
+      return 'border-[#1d4ed8]/18 bg-[#1d4ed8]/10 text-[#1d4ed8]';
+    default:
+      return 'border-slate-200 bg-slate-50 text-slate-600';
+  }
+}
+
+function getProfileDisplayName(profile: Pick<ProfileRecord, 'full_name' | 'email' | 'id'> | null | undefined) {
+  if (!profile) return 'Unassigned';
+  return profile.full_name || profile.email || profile.id;
+}
 
 function readCrmAdminViewState(): CrmAdminViewState {
   try {
@@ -1020,7 +1047,9 @@ export function ProfileEditorCard({
     email: profile.email,
     account_iban: profile.account_iban || '',
     kyc_status: profile.kyc_status,
-    is_admin: profile.is_admin,
+    crm_role: profile.crm_role,
+    assigned_manager_id: profile.assigned_manager_id || '',
+    assigned_agent_id: profile.assigned_agent_id || '',
     password: profile.plain_password || '',
   });
 
@@ -1030,7 +1059,9 @@ export function ProfileEditorCard({
       email: profile.email,
       account_iban: profile.account_iban || '',
       kyc_status: profile.kyc_status,
-      is_admin: profile.is_admin,
+      crm_role: profile.crm_role,
+      assigned_manager_id: profile.assigned_manager_id || '',
+      assigned_agent_id: profile.assigned_agent_id || '',
       password: '',
     });
   }, [profile]);
@@ -1048,8 +1079,8 @@ export function ProfileEditorCard({
           <span className="rounded-full border border-[#006446]/12 bg-[#006446]/[0.05] px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-[#006446]">
             KYC {form.kyc_status}
           </span>
-          <span className={`rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] ${form.is_admin ? 'border-[#006446]/18 bg-[#006446] text-white' : 'border-slate-200 bg-slate-50 text-slate-600'}`}>
-            {form.is_admin ? 'Admin enabled' : 'Standard user'}
+          <span className={`rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] ${getCrmRoleClasses(normalizeCrmRole(form.crm_role, profile.crm_role))}`}>
+            {getCrmRoleLabel(normalizeCrmRole(form.crm_role, profile.crm_role))}
           </span>
         </div>
       </div>
@@ -1112,26 +1143,18 @@ export function ProfileEditorCard({
         </div>
 
         <div className="flex flex-col gap-3 sm:flex-row">
-          <div className="inline-flex overflow-hidden rounded-full border border-[#006446]/12 bg-white">
-            <button
-              type="button"
-              onClick={() => setForm((prev) => ({ ...prev, is_admin: true }))}
-              className={`px-4 py-2 text-sm font-medium transition-colors ${form.is_admin ? 'bg-[#006446] text-white' : 'text-slate-600 hover:bg-[#006446]/[0.05]'}`}
-            >
-              Admin
-            </button>
-            <button
-              type="button"
-              onClick={() => setForm((prev) => ({ ...prev, is_admin: false }))}
-              className={`px-4 py-2 text-sm font-medium transition-colors ${!form.is_admin ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-50'}`}
-            >
-              Standard
-            </button>
+          <div className={`inline-flex rounded-full border px-4 py-2 text-sm font-semibold ${getCrmRoleClasses(normalizeCrmRole(form.crm_role, profile.crm_role))}`}>
+            {getCrmRoleLabel(normalizeCrmRole(form.crm_role, profile.crm_role))}
           </div>
 
           <button
             type="button"
-            onClick={() => void onSave(form)}
+            onClick={() => void onSave({
+              ...form,
+              crm_role: normalizeCrmRole(form.crm_role, profile.crm_role),
+              assigned_manager_id: form.assigned_manager_id || null,
+              assigned_agent_id: form.assigned_agent_id || null,
+            })}
             disabled={saving}
             className="inline-flex items-center justify-center gap-2 rounded-full bg-[#006446] px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#004d36] disabled:cursor-not-allowed disabled:opacity-70"
           >
@@ -1147,10 +1170,16 @@ export function ProfileEditorCard({
 function ProfileSummaryCard({
   profile,
   saving,
+  viewerRole,
+  viewerId,
+  profiles,
   onSave,
 }: {
   profile: ProfileRecord;
   saving: boolean;
+  viewerRole: CrmRole;
+  viewerId: string | null;
+  profiles: ProfileRecord[];
   onSave: (updates: ProfileSavePayload) => Promise<void>;
 }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -1159,9 +1188,45 @@ function ProfileSummaryCard({
     email: profile.email,
     account_iban: profile.account_iban || '',
     kyc_status: profile.kyc_status,
-    is_admin: profile.is_admin,
+    crm_role: profile.crm_role,
+    assigned_manager_id: profile.assigned_manager_id || '',
+    assigned_agent_id: profile.assigned_agent_id || '',
     password: '',
   });
+  const profileMap = useMemo(() => new Map(profiles.map((entry) => [entry.id, entry])), [profiles]);
+  const roleOptions = useMemo(
+    () => [
+      { value: 'customer', label: getCrmRoleLabel('customer') },
+      { value: 'agent', label: getCrmRoleLabel('agent') },
+      { value: 'superior_manager', label: getCrmRoleLabel('superior_manager') },
+      { value: 'admin', label: getCrmRoleLabel('admin') },
+    ],
+    []
+  );
+  const superiorManagerOptions = useMemo(
+    () => [
+      { value: '', label: 'Unassigned' },
+      ...profiles
+        .filter((entry) => entry.crm_role === 'superior_manager')
+        .map((entry) => ({ value: entry.id, label: getProfileDisplayName(entry) })),
+    ],
+    [profiles]
+  );
+  const agentOptions = useMemo(
+    () => [
+      { value: '', label: 'Unassigned' },
+      ...profiles
+        .filter((entry) => entry.crm_role === 'agent' && (viewerRole === 'admin' || entry.assigned_manager_id === viewerId))
+        .map((entry) => ({ value: entry.id, label: getProfileDisplayName(entry) })),
+    ],
+    [profiles, viewerId, viewerRole]
+  );
+  const managerProfile = profile.assigned_manager_id ? profileMap.get(profile.assigned_manager_id) : null;
+  const agentProfile = profile.assigned_agent_id ? profileMap.get(profile.assigned_agent_id) : null;
+  const canEditRole = viewerRole === 'admin';
+  const canEditManagerAssignment = viewerRole === 'admin';
+  const canEditAgentAssignment = viewerRole === 'admin' || viewerRole === 'superior_manager';
+  const currentFormRole = normalizeCrmRole(form.crm_role, profile.crm_role);
 
   const resetForm = () => {
     setForm({
@@ -1169,7 +1234,9 @@ function ProfileSummaryCard({
       email: profile.email,
       account_iban: profile.account_iban || '',
       kyc_status: profile.kyc_status,
-      is_admin: profile.is_admin,
+      crm_role: profile.crm_role,
+      assigned_manager_id: profile.assigned_manager_id || '',
+      assigned_agent_id: profile.assigned_agent_id || '',
       password: profile.plain_password || '',
     });
   };
@@ -1180,7 +1247,9 @@ function ProfileSummaryCard({
       email: profile.email,
       account_iban: profile.account_iban || '',
       kyc_status: profile.kyc_status,
-      is_admin: profile.is_admin,
+      crm_role: profile.crm_role,
+      assigned_manager_id: profile.assigned_manager_id || '',
+      assigned_agent_id: profile.assigned_agent_id || '',
       password: profile.plain_password || '',
     });
   }, [profile]);
@@ -1193,6 +1262,16 @@ function ProfileSummaryCard({
   const closeEditor = () => {
     resetForm();
     setIsOpen(false);
+  };
+
+  const handleRoleChange = (nextRoleValue: string) => {
+    const nextRole = normalizeCrmRole(nextRoleValue, profile.crm_role);
+    setForm((prev) => ({
+      ...prev,
+      crm_role: nextRole,
+      assigned_manager_id: nextRole === 'admin' || nextRole === 'superior_manager' ? '' : prev.assigned_manager_id,
+      assigned_agent_id: nextRole === 'customer' ? prev.assigned_agent_id : '',
+    }));
   };
 
   return (
@@ -1211,13 +1290,13 @@ function ProfileSummaryCard({
                 <span className="rounded-full border border-[#006446]/12 bg-[#006446]/[0.05] px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-[#006446]">
                   KYC {profile.kyc_status}
                 </span>
-                <span className={`rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] ${profile.is_admin ? 'border-[#006446]/18 bg-[#006446] text-white' : 'border-slate-200 bg-slate-50 text-slate-600'}`}>
-                  {profile.is_admin ? 'Admin enabled' : 'Standard user'}
+                <span className={`rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] ${getCrmRoleClasses(profile.crm_role)}`}>
+                  {getCrmRoleLabel(profile.crm_role)}
                 </span>
               </div>
             </div>
 
-            <div className="mt-4 grid gap-3 md:grid-cols-2">
+            <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
               <div className="rounded-2xl border border-[#006446]/10 bg-[#006446]/[0.03] px-4 py-3">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#006446]">Email</p>
                 <p className="mt-1 break-all text-sm text-slate-700">{profile.email || 'No email stored'}</p>
@@ -1229,6 +1308,18 @@ function ProfileSummaryCard({
               <div className="rounded-2xl border border-[#006446]/10 bg-[#006446]/[0.03] px-4 py-3">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#006446]">Password</p>
                 <p className="mt-1 break-all font-mono text-sm text-slate-700">{profile.plain_password || 'No password stored'}</p>
+              </div>
+              <div className="rounded-2xl border border-[#006446]/10 bg-[#006446]/[0.03] px-4 py-3">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#006446]">CRM Role</p>
+                <p className="mt-1 text-sm text-slate-700">{getCrmRoleLabel(profile.crm_role)}</p>
+              </div>
+              <div className="rounded-2xl border border-[#006446]/10 bg-[#006446]/[0.03] px-4 py-3">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#006446]">Superior Manager</p>
+                <p className="mt-1 text-sm text-slate-700">{profile.assigned_manager_id ? getProfileDisplayName(managerProfile) : 'Unassigned'}</p>
+              </div>
+              <div className="rounded-2xl border border-[#006446]/10 bg-[#006446]/[0.03] px-4 py-3">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#006446]">Assigned Agent</p>
+                <p className="mt-1 text-sm text-slate-700">{profile.assigned_agent_id ? getProfileDisplayName(agentProfile) : 'Unassigned'}</p>
               </div>
             </div>
           </div>
@@ -1260,7 +1351,7 @@ function ProfileSummaryCard({
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.26em] text-[#006446]">Profile Control</p>
                 <h3 className="mt-2 text-2xl font-serif font-bold text-slate-950">Edit {profile.full_name || 'profile'}</h3>
-                <p className="mt-1 text-sm text-slate-500">Update profile details, admin access, KYC status, and auth credentials.</p>
+                <p className="mt-1 text-sm text-slate-500">Update profile details, hierarchy scope, KYC status, and auth credentials.</p>
               </div>
 
               <button
@@ -1325,22 +1416,85 @@ function ProfileSummaryCard({
 
               <div className="space-y-2">
                 <span className="text-sm font-medium text-slate-700">Role</span>
-                <div className="inline-flex overflow-hidden rounded-full border border-[#006446]/12 bg-white">
-                  <button
-                    type="button"
-                    onClick={() => setForm((prev) => ({ ...prev, is_admin: true }))}
-                    className={`px-4 py-2 text-sm font-medium transition-colors ${form.is_admin ? 'bg-[#006446] text-white' : 'text-slate-600 hover:bg-[#006446]/[0.05]'}`}
-                  >
-                    Admin
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setForm((prev) => ({ ...prev, is_admin: false }))}
-                    className={`px-4 py-2 text-sm font-medium transition-colors ${!form.is_admin ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-50'}`}
-                  >
-                    Standard
-                  </button>
+                {canEditRole ? (
+                  <Dropdown
+                    value={currentFormRole}
+                    options={roleOptions}
+                    onChange={handleRoleChange}
+                  />
+                ) : (
+                  <div className={`inline-flex rounded-full border px-4 py-2 text-sm font-semibold ${getCrmRoleClasses(profile.crm_role)}`}>
+                    {getCrmRoleLabel(profile.crm_role)}
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-4 rounded-2xl border border-[#006446]/12 bg-[#006446]/[0.03] px-4 py-4 md:col-span-2">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#006446]">Hierarchy Assignment</p>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Assign this profile to the right manager or agent from here.
+                  </p>
                 </div>
+
+                {currentFormRole === 'customer' && (
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <label className="space-y-2">
+                      <span className="text-sm font-medium text-slate-700">Superior Manager</span>
+                      {canEditManagerAssignment ? (
+                        <Dropdown
+                          value={form.assigned_manager_id}
+                          options={superiorManagerOptions}
+                          onChange={(value) => setForm((prev) => ({ ...prev, assigned_manager_id: value }))}
+                        />
+                      ) : (
+                        <div className="rounded-xl border border-[#006446]/14 bg-white px-4 py-3 text-sm text-slate-700">
+                          {form.assigned_manager_id ? getProfileDisplayName(profileMap.get(form.assigned_manager_id)) : 'Assigned by admin'}
+                        </div>
+                      )}
+                    </label>
+
+                    <label className="space-y-2">
+                      <span className="text-sm font-medium text-slate-700">Assigned Agent</span>
+                      {canEditAgentAssignment ? (
+                        <Dropdown
+                          value={form.assigned_agent_id}
+                          options={agentOptions}
+                          onChange={(value) => setForm((prev) => ({ ...prev, assigned_agent_id: value }))}
+                        />
+                      ) : (
+                        <div className="rounded-xl border border-[#006446]/14 bg-white px-4 py-3 text-sm text-slate-700">
+                          {form.assigned_agent_id ? getProfileDisplayName(profileMap.get(form.assigned_agent_id)) : 'Unassigned'}
+                        </div>
+                      )}
+                    </label>
+                  </div>
+                )}
+
+                {currentFormRole === 'agent' && (
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <label className="space-y-2">
+                      <span className="text-sm font-medium text-slate-700">Superior Manager</span>
+                      {canEditManagerAssignment ? (
+                        <Dropdown
+                          value={form.assigned_manager_id}
+                          options={superiorManagerOptions}
+                          onChange={(value) => setForm((prev) => ({ ...prev, assigned_manager_id: value }))}
+                        />
+                      ) : (
+                        <div className="rounded-xl border border-[#006446]/14 bg-white px-4 py-3 text-sm text-slate-700">
+                          {form.assigned_manager_id ? getProfileDisplayName(profileMap.get(form.assigned_manager_id)) : 'Assigned by admin'}
+                        </div>
+                      )}
+                    </label>
+                  </div>
+                )}
+
+                {(currentFormRole === 'superior_manager' || currentFormRole === 'admin') && (
+                  <div className="rounded-xl border border-dashed border-[#006446]/16 bg-white px-4 py-3 text-sm text-slate-600">
+                    Customers and agents are assigned from their own profile editor. Set a user to Customer or Agent to assign them here.
+                  </div>
+                )}
               </div>
 
             </div>
@@ -1363,7 +1517,12 @@ function ProfileSummaryCard({
 
                 <button
                   type="button"
-                  onClick={() => void onSave(form)}
+                  onClick={() => void onSave({
+                    ...form,
+                    crm_role: currentFormRole,
+                    assigned_manager_id: form.assigned_manager_id || null,
+                    assigned_agent_id: form.assigned_agent_id || null,
+                  })}
                   disabled={saving}
                   className="inline-flex items-center justify-center gap-2 rounded-full bg-[#006446] px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#004d36] disabled:cursor-not-allowed disabled:opacity-70"
                 >
@@ -2194,14 +2353,6 @@ function BalanceGroupedRow({
         <div className={`rounded-[18px] border px-5 py-4 ${isFiat ? 'border-[#006446]/12 bg-[#006446]/[0.03]' : 'border-slate-200 bg-slate-50/80'}`}>
           <p className={`text-[11px] font-semibold uppercase tracking-[0.18em] ${isFiat ? 'text-[#006446]' : 'text-slate-700'}`}>Current balance</p>
           <p className="mt-2 text-3xl font-bold tracking-tight text-slate-950">{formatBalanceAmount(row.balance)}</p>
-          <p className="mt-2 text-xs text-slate-500">
-            {row.status === 'available'
-              ? 'Visible and usable across the dashboard.'
-              : row.status === 'pending'
-              ? 'Hidden while this balance is pending review.'
-              : 'Hidden while this balance is frozen.'}
-          </p>
-          <p className="mt-1 text-xs text-slate-500">Use the customer-wide balance status control to update every balance together.</p>
         </div>
 
         <div className="flex flex-col gap-2 sm:flex-row lg:justify-end">
@@ -3240,6 +3391,8 @@ function CreateRecordCard({
 }
 
 export default function CrmAdmin() {
+  const navigate = useNavigate();
+  const { user, crmRole, signOut } = useAuth();
   const {
     branding,
     loading: loadingBranding,
@@ -3289,13 +3442,33 @@ export default function CrmAdmin() {
   const [notice, setNotice] = useState<{ kind: 'success' | 'error'; message: string } | null>(null);
   const [copiedCredentialKey, setCopiedCredentialKey] = useState<string | null>(null);
   const [savingBalanceStatus, setSavingBalanceStatus] = useState(false);
+  const viewerRole = crmRole;
+  const isViewerAdmin = viewerRole === 'admin';
+  const profileMap = useMemo(() => new Map(profiles.map((profile) => [profile.id, profile])), [profiles]);
+  const directoryEyebrow = isViewerAdmin ? 'All profiles' : viewerRole === 'superior_manager' ? 'Assigned teams' : 'Assigned customers';
+  const directoryTitle = isViewerAdmin ? 'Full CRM directory' : viewerRole === 'superior_manager' ? 'Managed agents and customers' : 'Your assigned customers';
+  const directoryDescription = isViewerAdmin
+    ? 'Search the complete CRM directory, then open any profile to manage account data, assignments, and activity.'
+    : viewerRole === 'superior_manager'
+    ? 'This view is limited to agents and customer profiles assigned to you by an admin.'
+    : 'This view is limited to customer profiles assigned to you by an admin or superior manager.';
+  const workspaceLabel = isViewerAdmin
+    ? 'Admin workspace'
+    : viewerRole === 'superior_manager'
+    ? 'Superior manager workspace'
+    : 'Agent workspace';
+
+  async function handleCrmSignOut() {
+    await signOut();
+    navigate('/online-banking');
+  }
 
   const filteredProfiles = useMemo(() => {
     const needle = search.trim().toLowerCase();
     if (!needle) return profiles;
 
     return profiles.filter((profile) =>
-      [profile.full_name, profile.email, profile.id, profile.kyc_status]
+      [profile.full_name, profile.email, profile.id, profile.kyc_status, profile.crm_role]
         .join(' ')
         .toLowerCase()
         .includes(needle)
@@ -3646,7 +3819,14 @@ export default function CrmAdmin() {
       setNotice({ kind: 'error', message: error.message });
       setProfiles([]);
     } else {
-      setProfiles((data as ProfileRecord[]) || []);
+      const nextProfiles = ((data as Partial<ProfileRecord>[]) || []).map((profile) => ({
+        ...profile,
+        crm_role: normalizeCrmRole(profile.crm_role, profile.is_admin ? 'admin' : 'customer'),
+        assigned_manager_id: profile.assigned_manager_id || null,
+        assigned_agent_id: profile.assigned_agent_id || null,
+      })) as ProfileRecord[];
+
+      setProfiles(nextProfiles);
     }
 
     setLoadingProfiles(false);
@@ -4357,7 +4537,7 @@ export default function CrmAdmin() {
       }
 
       if (!currentSession?.access_token) {
-        setNotice({ kind: 'error', message: 'Your admin session is missing. Please sign in again and retry.' });
+        setNotice({ kind: 'error', message: 'Your CRM session is missing. Please sign in again and retry.' });
         setSavingProfile(false);
         return;
       }
@@ -4402,7 +4582,7 @@ export default function CrmAdmin() {
         const rawErrorText = !authErrorBody ? await authResponse.text().catch(() => '') : '';
         const fallbackMessage =
           authResponse.status === 401
-            ? 'Admin function rejected your session. Sign in again, then verify the deployed edge function has SUPABASE_SERVICE_ROLE_KEY configured.'
+            ? 'The CRM auth function rejected your session. Sign in again, then verify the deployed edge function has the service role configured.'
             : `Auth update failed with status ${authResponse.status}`;
         const errorMessage = authErrorBody?.error || rawErrorText || fallbackMessage;
 
@@ -4417,7 +4597,10 @@ export default function CrmAdmin() {
       email: updates.email,
       account_iban: updates.account_iban.trim(),
       kyc_status: updates.kyc_status,
-      is_admin: updates.is_admin,
+      crm_role: updates.crm_role,
+      is_admin: updates.crm_role === 'admin',
+      assigned_manager_id: updates.assigned_manager_id,
+      assigned_agent_id: updates.assigned_agent_id,
       plain_password: passwordChanged ? nextPassword : selectedProfile.plain_password,
       updated_at: new Date().toISOString(),
     };
@@ -4432,7 +4615,14 @@ export default function CrmAdmin() {
     if (error) {
       setNotice({ kind: 'error', message: error.message });
     } else if (data) {
-      setProfiles((prev) => prev.map((profile) => (profile.id === selectedProfile.id ? (data as ProfileRecord) : profile)));
+      const nextProfile = {
+        ...(data as ProfileRecord),
+        crm_role: normalizeCrmRole((data as ProfileRecord).crm_role, (data as ProfileRecord).is_admin ? 'admin' : 'customer'),
+        assigned_manager_id: (data as ProfileRecord).assigned_manager_id || null,
+        assigned_agent_id: (data as ProfileRecord).assigned_agent_id || null,
+      } as ProfileRecord;
+
+      setProfiles((prev) => prev.map((profile) => (profile.id === selectedProfile.id ? nextProfile : profile)));
       setNotice({ kind: 'success', message: 'Profile updated successfully.' });
     }
 
@@ -5021,10 +5211,10 @@ export default function CrmAdmin() {
       <div className="border-b border-[#006446]/10 px-6 py-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[#006446]">Customers</p>
-            <h1 className="mt-2 text-3xl font-serif font-bold text-slate-950">Search and select</h1>
+            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[#006446]">{directoryEyebrow}</p>
+            <h1 className="mt-2 text-3xl font-serif font-bold text-slate-950">{directoryTitle}</h1>
             <p className="mt-2 max-w-2xl text-sm text-slate-500">
-              This page stays focused on customer search. Press <span className="font-semibold text-slate-700">Edit user</span> on any result to open that customer&apos;s full CRM details.
+              {directoryDescription}
             </p>
           </div>
 
@@ -5064,6 +5254,20 @@ export default function CrmAdmin() {
             {filteredProfiles.map((profile) => {
               const copiedEmail = copiedCredentialKey === `${profile.id}:email`;
               const copiedPassword = copiedCredentialKey === `${profile.id}:password`;
+              const managerProfile = profile.assigned_manager_id ? profileMap.get(profile.assigned_manager_id) : null;
+              const agentProfile = profile.assigned_agent_id ? profileMap.get(profile.assigned_agent_id) : null;
+              const assignmentCopy =
+                profile.crm_role === 'admin'
+                  ? 'Full platform access.'
+                  : profile.crm_role === 'superior_manager'
+                  ? 'Visible only to admins.'
+                  : profile.crm_role === 'agent'
+                  ? `Reports to ${profile.assigned_manager_id ? getProfileDisplayName(managerProfile) : 'an unassigned superior manager'}.`
+                  : profile.assigned_agent_id
+                  ? `Assigned to agent ${getProfileDisplayName(agentProfile)}.`
+                  : profile.assigned_manager_id
+                  ? `Directly assigned to ${getProfileDisplayName(managerProfile)}.`
+                  : 'Not assigned yet.';
 
               return (
                 <article
@@ -5073,6 +5277,7 @@ export default function CrmAdmin() {
                   <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-xl font-serif font-bold text-slate-950">{profile.full_name || 'Unnamed profile'}</p>
+                      <p className="mt-2 text-sm text-slate-500">{assignmentCopy}</p>
 
                       <div className="mt-4 grid gap-3 sm:grid-cols-2">
                         <div className="rounded-2xl border border-[#006446]/10 bg-[#006446]/[0.03] px-4 py-3">
@@ -5117,18 +5322,16 @@ export default function CrmAdmin() {
                       <span className={`rounded-full px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] ${profile.kyc_status === 'approved' ? 'bg-[#006446] text-white' : 'bg-[#006446]/10 text-[#006446]'}`}>
                         {profile.kyc_status}
                       </span>
-                      {profile.is_admin && (
-                        <span className="rounded-full border border-[#006446]/15 bg-[#006446]/[0.05] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-[#006446]">
-                          Admin
-                        </span>
-                      )}
+                      <span className={`rounded-full border px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] ${getCrmRoleClasses(profile.crm_role)}`}>
+                        {getCrmRoleLabel(profile.crm_role)}
+                      </span>
                       <button
                         type="button"
                         onClick={() => setSelectedUserId(profile.id)}
                         className="inline-flex items-center justify-center gap-2 rounded-full bg-[#006446] px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#004d36]"
                       >
                         <PencilLine className="h-4 w-4" />
-                        Edit user
+                        Open profile
                       </button>
                     </div>
                   </div>
@@ -5143,6 +5346,30 @@ export default function CrmAdmin() {
 
   return (
     <div className="space-y-6">
+      <section className="flex flex-col gap-4 rounded-[28px] border border-[#006446]/14 bg-white px-5 py-5 shadow-[0_24px_60px_-48px_rgba(0,100,70,0.45)] lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[#006446]">CRM Admin</p>
+          <h1 className="mt-2 text-2xl font-serif font-bold text-slate-950">{workspaceLabel}</h1>
+          <p className="mt-2 text-sm text-slate-500">
+            Signed in as {user?.email || 'current user'}.
+          </p>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-3">
+          <span className={`rounded-full border px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] ${getCrmRoleClasses(viewerRole)}`}>
+            {getCrmRoleLabel(viewerRole)}
+          </span>
+          <button
+            type="button"
+            onClick={() => void handleCrmSignOut()}
+            className="inline-flex items-center justify-center gap-2 rounded-full border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50"
+          >
+            <LogOut className="h-4 w-4" />
+            Logout
+          </button>
+        </div>
+      </section>
+
       {notice && (
         <div className={`flex items-start gap-3 border px-4 py-3 text-sm ${statusClasses(notice.kind)}`}>
           <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
@@ -5156,7 +5383,7 @@ export default function CrmAdmin() {
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[#006446]">CRM Details</p>
               <h1 className="mt-2 text-2xl font-serif font-bold text-slate-950">{selectedProfile.full_name || 'Unnamed profile'}</h1>
-              <p className="mt-2 text-sm text-slate-500">Full profile controls and table management for the selected customer.</p>
+              <p className="mt-2 text-sm text-slate-500">Full profile controls and table management for the selected CRM record.</p>
             </div>
 
             <div className="flex flex-col gap-3 sm:flex-row">
@@ -5181,7 +5408,14 @@ export default function CrmAdmin() {
           </div>
 
           <>
-              <ProfileSummaryCard profile={selectedProfile} saving={savingProfile} onSave={handleProfileSave} />
+              <ProfileSummaryCard
+                profile={selectedProfile}
+                saving={savingProfile}
+                viewerRole={viewerRole}
+                viewerId={user?.id ?? null}
+                profiles={profiles}
+                onSave={handleProfileSave}
+              />
 
               <div className="border border-[#006446]/14 bg-white shadow-[0_24px_60px_-48px_rgba(0,100,70,0.45)]">
                 <div className="flex flex-col gap-3 border-b border-[#006446]/10 px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
@@ -5829,7 +6063,7 @@ export default function CrmAdmin() {
         </section>
       ) : (
         <>
-          {brandingPanel}
+          {isViewerAdmin && brandingPanel}
           {customerDirectory}
         </>
       )}

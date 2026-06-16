@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useRef, useState, useCallback, type ReactNode } from 'react';
 import type { User, Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
+import { isStaffCrmRole, normalizeCrmRole, type CrmRole } from '../lib/crmRoles';
 
 type KycStatus = 'pending' | 'submitted' | 'approved' | 'rejected';
 
@@ -9,7 +10,10 @@ interface AuthProfile {
   email: string;
   account_iban: string;
   kyc_status: KycStatus;
+  crm_role: CrmRole;
   is_admin: boolean;
+  assigned_manager_id: string | null;
+  assigned_agent_id: string | null;
 }
 
 interface AuthContextType {
@@ -18,6 +22,8 @@ interface AuthContextType {
   loading: boolean;
   kycStatus: KycStatus | null;
   isAdmin: boolean;
+  isCrmStaff: boolean;
+  crmRole: CrmRole;
   profile: AuthProfile | null;
   refreshKycStatus: () => Promise<void>;
   signUp: (email: string, password: string, fullName: string) => Promise<{ error: string | null }>;
@@ -33,6 +39,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [kycStatus, setKycStatus] = useState<KycStatus | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isCrmStaff, setIsCrmStaff] = useState(false);
+  const [crmRole, setCrmRole] = useState<CrmRole>('customer');
   const [profile, setProfile] = useState<AuthProfile | null>(null);
   const userRef = useRef<User | null>(null);
   const profileRef = useRef<AuthProfile | null>(null);
@@ -48,24 +56,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const fetchProfileState = useCallback(async (userId: string) => {
     const { data } = await supabase
       .from('profiles')
-      .select('full_name, email, account_iban, kyc_status, is_admin')
+      .select('full_name, email, account_iban, kyc_status, crm_role, is_admin, assigned_manager_id, assigned_agent_id')
       .eq('id', userId)
       .maybeSingle();
 
     if (data) {
+      const nextRole = normalizeCrmRole(data.crm_role, Boolean(data.is_admin) ? 'admin' : 'customer');
       setProfile({
         full_name: data.full_name || '',
         email: data.email || '',
         account_iban: data.account_iban || '',
         kyc_status: data.kyc_status as KycStatus,
-        is_admin: Boolean(data.is_admin),
+        crm_role: nextRole,
+        is_admin: nextRole === 'admin',
+        assigned_manager_id: data.assigned_manager_id || null,
+        assigned_agent_id: data.assigned_agent_id || null,
       });
       setKycStatus(data.kyc_status as KycStatus);
-      setIsAdmin(Boolean(data.is_admin));
+      setCrmRole(nextRole);
+      setIsAdmin(nextRole === 'admin');
+      setIsCrmStaff(isStaffCrmRole(nextRole));
     } else {
       setProfile(null);
       setKycStatus(null);
       setIsAdmin(false);
+      setIsCrmStaff(false);
+      setCrmRole('customer');
     }
   }, []);
 
@@ -107,6 +123,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setProfile(null);
         setKycStatus(null);
         setIsAdmin(false);
+        setIsCrmStaff(false);
+        setCrmRole('customer');
         setLoading(false);
       }
     });
@@ -135,7 +153,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, session, loading, kycStatus, isAdmin, profile, refreshKycStatus, signUp, signIn, signOut }}>
+    <AuthContext.Provider value={{ user, session, loading, kycStatus, isAdmin, isCrmStaff, crmRole, profile, refreshKycStatus, signUp, signIn, signOut }}>
       {children}
     </AuthContext.Provider>
   );
