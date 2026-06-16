@@ -1,0 +1,78 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply text-surface-900 bg-white font-sans;
+    line-height: 1.6;
+  }
+
+  h1, h2, h3, h4 {
+    line-height: 1.2;
+  }
+
+  ::selection {
+    @apply bg-brand-200 text-brand-950;
+  }
+}
+
+@layer utilities {
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .animate-in {
+    animation: dropdown-in 0.2s ease-out;
+  }
+
+  .glass {
+    @apply bg-white/80 backdrop-blur-xl;
+  }
+
+  .glass-dark {
+    @apply bg-surface-950/80 backdrop-blur-xl;
+  }
+
+  .gradient-text {
+    @apply bg-gradient-to-r from-brand-500 to-brand-700 bg-clip-text text-transparent;
+  }
+
+  .section-padding {
+    @apply py-20 md:py-28;
+  }
+}
+
+@keyframes dropdown-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes loading-bar {
+  0% {
+    transform: translateX(-110%);
+  }
+  50% {
+    transform: translateX(35%);
+  }
+  100% {
+    transform: translateX(220%);
+  }
+}
