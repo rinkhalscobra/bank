@@ -111,8 +111,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     <div className="flex h-screen flex-col overflow-hidden bg-[#006446]/[0.04]">
       {!isCrmAdmin && (
         <div className="z-30 shrink-0 bg-gradient-to-r from-[#00523a] via-[#006446] to-[#0a7f59] shadow-[0_18px_45px_-38px_rgba(0,100,70,0.45)]">
-          <header className="flex min-h-[72px] items-center gap-4 px-4 sm:px-6">
-            <div className="relative flex min-w-0 flex-1 self-stretch">
+          <header className="flex min-h-[76px] items-center gap-3 px-4 sm:gap-4 sm:px-6">
+            <div className="relative flex min-w-0 self-stretch max-w-[calc(100%-6.5rem)] sm:max-w-[calc(100%-14rem)]">
               {canScrollLeft && (
                 <button
                   onClick={() => scroll('left')}
@@ -124,9 +124,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
               <div
                 ref={scrollRef}
-                className="h-full min-w-0 flex-1 overflow-x-auto scrollbar-hide"
+                className="h-full min-w-0 overflow-x-auto scrollbar-hide"
               >
-                <div className="mx-auto flex h-full w-max items-stretch">
+                <div className="flex h-full w-max items-stretch">
                   {navSections.map((section) => (
                     <div key={section.label} className="flex h-full shrink-0 items-stretch">
                       {section.items.map((item) => {
@@ -135,7 +135,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                           <button
                             key={item.path}
                             onClick={() => navigate(item.path)}
-                            className={`relative flex h-full shrink-0 flex-col items-center justify-center gap-0.5 px-3 py-2.5 text-[10px] font-medium transition-all duration-200 sm:px-4 sm:text-xs ${
+                            className={`relative flex h-full shrink-0 flex-col items-center justify-center gap-1 px-4 py-3 text-[11px] font-medium transition-all duration-200 sm:px-5 sm:text-[13px] ${
                               active
                                 ? 'bg-white/10 text-white'
                                 : 'text-white hover:bg-white/8'
@@ -144,8 +144,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                             {active && (
                               <span className="absolute inset-x-2 top-0 h-0.5 rounded-b bg-white" />
                             )}
-                            <item.icon className="h-4.5 w-4.5 sm:h-5 sm:w-5" />
-                            <span className="truncate max-w-[56px] sm:max-w-none">{item.label}</span>
+                            <item.icon className="h-5 w-5 sm:h-[22px] sm:w-[22px]" />
+                            <span className="truncate max-w-[64px] sm:max-w-none">{item.label}</span>
                           </button>
                         );
                       })}
@@ -154,7 +154,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
                   <button
                     onClick={() => navigate('/dashboard/profile')}
-                    className={`relative flex h-full shrink-0 flex-col items-center justify-center gap-0.5 px-3 py-2.5 text-[10px] font-medium transition-all duration-200 sm:px-4 sm:text-xs ${
+                    className={`relative flex h-full shrink-0 flex-col items-center justify-center gap-1 px-4 py-3 text-[11px] font-medium transition-all duration-200 sm:px-5 sm:text-[13px] ${
                       isActive('/dashboard/profile')
                         ? 'bg-white/10 text-white'
                         : 'text-white hover:bg-white/8'
@@ -163,7 +163,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                     {isActive('/dashboard/profile') && (
                       <span className="absolute inset-x-2 top-0 h-0.5 rounded-b bg-white" />
                     )}
-                    <User className="h-4.5 w-4.5 sm:h-5 sm:w-5" />
+                    <User className="h-5 w-5 sm:h-[22px] sm:w-[22px]" />
                     <span>{t('dashboardLayout.nav.profile')}</span>
                   </button>
                 </div>
@@ -179,23 +179,22 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               )}
             </div>
 
-            <div className="flex shrink-0 items-center gap-3">
-              <div ref={langRef} className="relative">
+            <div ref={langRef} className="relative shrink-0">
                 <button
                   onClick={() => setShowLangDropdown(!showLangDropdown)}
-                  className="flex items-center gap-2 rounded-lg border border-white/15 px-3 py-2 text-white transition-all duration-200 hover:border-white/30 hover:bg-white/10"
+                  className="flex items-center gap-2.5 rounded-lg border border-white/15 px-3.5 py-2.5 text-white transition-all duration-200 hover:border-white/30 hover:bg-white/10"
                   title={t('dashboardLayout.header.language')}
                 >
-                  <Globe className="h-4 w-4" />
-                  <img src={currentLang.flag} alt="" className="h-3.5 w-5 rounded-sm object-cover" />
+                  <Globe className="h-[18px] w-[18px]" />
+                  <img src={currentLang.flag} alt="" className="h-4 w-[22px] rounded-sm object-cover" />
                   <span className="hidden text-sm font-medium sm:inline">{currentLang.code.toUpperCase()}</span>
                   <ChevronDown
-                    className={`h-3 w-3 transition-transform duration-200 ${showLangDropdown ? 'rotate-180' : ''}`}
+                    className={`h-3.5 w-3.5 transition-transform duration-200 ${showLangDropdown ? 'rotate-180' : ''}`}
                   />
                 </button>
 
                 {showLangDropdown && (
-                  <div className="absolute right-0 top-full z-50 mt-2 w-48 overflow-hidden rounded-xl border border-[#006446]/12 bg-white shadow-[0_24px_70px_-38px_rgba(0,100,70,0.45)]">
+                  <div className="absolute left-0 top-full z-50 mt-2 w-48 overflow-hidden rounded-xl border border-[#006446]/12 bg-white shadow-[0_24px_70px_-38px_rgba(0,100,70,0.45)]">
                     <div className="p-2">
                       {languages.map((lang) => (
                         <button
@@ -221,17 +220,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                     </div>
                   </div>
                 )}
-              </div>
-
-              <button
-                onClick={handleSignOut}
-                className="flex items-center gap-1.5 text-sm text-white transition-colors hover:text-white/80"
-                title={t('dashboardLayout.header.signOut')}
-              >
-                <LogOut className="h-4 w-4" />
-                <span className="hidden sm:inline">{t('dashboardLayout.header.signOut')}</span>
-              </button>
             </div>
+
+            <button
+              onClick={handleSignOut}
+              className="ml-auto flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm text-white transition-colors hover:bg-white/10 hover:text-white/80"
+              title={t('dashboardLayout.header.signOut')}
+            >
+              <LogOut className="h-[18px] w-[18px]" />
+              <span className="hidden sm:inline">{t('dashboardLayout.header.signOut')}</span>
+            </button>
           </header>
         </div>
       )}

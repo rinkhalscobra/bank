@@ -255,9 +255,11 @@ export default function DashboardOverview() {
                       {fb.currency}
                     </span>
                   </div>
-                  <span className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] ${getBalanceStatusClasses(fb.status)}`}>
-                    {getLocalizedBalanceStatusLabel(t, fb.status)}
-                  </span>
+                  {!isBalanceAvailable(fb.status) ? (
+                    <span className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] ${getBalanceStatusClasses(fb.status)}`}>
+                      {getLocalizedBalanceStatusLabel(t, fb.status)}
+                    </span>
+                  ) : null}
                 </div>
                 <p className="text-sm font-medium text-slate-700 mb-1">
                   {fb.currency === 'USD'
@@ -317,9 +319,11 @@ export default function DashboardOverview() {
                           {crypto.symbol}
                         </span>
                       </div>
-                      <span className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] ${getBalanceStatusClasses(crypto.status)}`}>
-                        {getLocalizedBalanceStatusLabel(t, crypto.status)}
-                      </span>
+                      {!isBalanceAvailable(crypto.status) ? (
+                        <span className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] ${getBalanceStatusClasses(crypto.status)}`}>
+                          {getLocalizedBalanceStatusLabel(t, crypto.status)}
+                        </span>
+                      ) : null}
                     </div>
                     <p className="text-sm font-medium text-slate-700 mb-1">{crypto.name}</p>
                     {showRestrictedState ? (
