@@ -15,11 +15,15 @@ import QRCode from '../../components/ui/QRCode';
 import { useLanguage } from '../../contexts/LanguageContext';
 import {
   getBalanceStatusClasses,
-  getBalanceStatusLabel,
-  getHiddenBalanceDescription,
-  getHiddenBalanceLabel,
   isBalanceAvailable,
 } from '../../lib/balanceStatus';
+import {
+  getLocalizedBalanceRestrictionMessage,
+  getLocalizedBalanceStatusLabel,
+  getLocalizedHiddenBalanceDescription,
+  getLocalizedHiddenBalanceLabel,
+  getLocalizedRestrictedBalanceCountMessage,
+} from '../../lib/balanceStatusI18n';
 import '../../i18n/dashboard-add-fund/translations';
 
 const CRYPTO_LOGOS: Record<string, string> = {
@@ -213,7 +217,7 @@ export default function DashboardFixedDeposits() {
                 </div>
                 {bal ? (
                   <span className={`rounded-full border px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.14em] ${getBalanceStatusClasses(bal.status)}`}>
-                    {getBalanceStatusLabel(bal.status)}
+                    {getLocalizedBalanceStatusLabel(t, bal.status)}
                   </span>
                 ) : null}
               </div>
@@ -221,11 +225,11 @@ export default function DashboardFixedDeposits() {
                 {bal
                   ? canShowAmount
                     ? bal.balance.toLocaleString('en-US', { maximumFractionDigits: 8 })
-                    : getHiddenBalanceLabel(bal.status)
+                    : getLocalizedHiddenBalanceLabel(t, bal.status)
                   : '0.00'}
               </p>
               {bal && !canShowAmount ? (
-                <p className="mt-1 text-[11px] text-slate-500">{getHiddenBalanceDescription(bal.status)}</p>
+                <p className="mt-1 text-[11px] text-slate-500">{getLocalizedHiddenBalanceDescription(t, bal.status)}</p>
               ) : null}
             </div>
           );
@@ -234,7 +238,7 @@ export default function DashboardFixedDeposits() {
 
       {restrictedBalanceCount > 0 ? (
         <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-          {restrictedBalanceCount} restricted crypto balance{restrictedBalanceCount === 1 ? '' : 's'} hidden from deposit actions until marked available.
+          {getLocalizedRestrictedBalanceCountMessage(t, 'deposits', restrictedBalanceCount)}
         </div>
       ) : null}
 
@@ -295,7 +299,7 @@ export default function DashboardFixedDeposits() {
                       {t('dashboardAddFund.form.balanceShort')}: {bal
                         ? canUseAsset
                           ? bal.balance.toLocaleString('en-US', { maximumFractionDigits: 6 })
-                          : getHiddenBalanceLabel(bal.status)
+                          : getLocalizedHiddenBalanceLabel(t, bal.status)
                         : '0'}
                     </p>
                   </button>
@@ -306,7 +310,7 @@ export default function DashboardFixedDeposits() {
 
           {!selectedBalanceAvailable ? (
             <div className="mb-6 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-              This asset is currently restricted and cannot be used for a deposit request.
+              {getLocalizedBalanceRestrictionMessage(t, 'depositActionBlocked')}
             </div>
           ) : null}
 

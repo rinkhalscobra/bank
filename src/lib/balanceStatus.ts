@@ -39,8 +39,8 @@ export function getBalanceStatusClasses(value: unknown) {
 export function getHiddenBalanceLabel(value: unknown) {
   const status = normalizeBalanceStatus(value);
 
-  if (status === 'pending') return 'Pending review';
-  if (status === 'frozen') return 'Temporarily frozen';
+  if (status === 'pending') return 'Under review';
+  if (status === 'frozen') return 'Temporarily unavailable';
   return 'Available';
 }
 
@@ -48,11 +48,11 @@ export function getHiddenBalanceDescription(value: unknown) {
   const status = normalizeBalanceStatus(value);
 
   if (status === 'pending') {
-    return 'This balance is hidden while it is pending review.';
+    return 'This balance will appear automatically once the review is complete.';
   }
 
   if (status === 'frozen') {
-    return 'This balance is hidden while it is frozen.';
+    return 'This balance is hidden until access is restored for this account.';
   }
 
   return 'This balance is available for transfers and exchanges.';

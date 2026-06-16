@@ -15,6 +15,10 @@ import { useFiatBalances } from '../../hooks/useFiatBalances';
 import { useCryptoBalances } from '../../hooks/useCryptoBalances';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { isBalanceAvailable } from '../../lib/balanceStatus';
+import {
+  getLocalizedBalanceRestrictionMessage,
+  getLocalizedRestrictedBalanceCountMessage,
+} from '../../lib/balanceStatusI18n';
 import '../../i18n/dashboard-currency-exchange/translations';
 
 type CurrencyExchangeControlPanelProps = {
@@ -325,7 +329,7 @@ export default function CurrencyExchangeControlPanel({
           <div className="p-6">
             {restrictedFiatCount > 0 && (
               <div className="mb-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-                {restrictedFiatCount} fiat balance{restrictedFiatCount === 1 ? '' : 's'} hidden from exchange controls until marked available.
+                {getLocalizedRestrictedBalanceCountMessage(t, 'exchangeFiat', restrictedFiatCount)}
               </div>
             )}
 
@@ -416,7 +420,7 @@ export default function CurrencyExchangeControlPanel({
 
               {availableFiatBalances.length < 2 ? (
                 <p className="text-xs text-slate-400">
-                  You need at least two available fiat balances to exchange funds.
+                  {getLocalizedBalanceRestrictionMessage(t, 'needTwoFiat')}
                 </p>
               ) : null}
             </form>
@@ -470,7 +474,7 @@ export default function CurrencyExchangeControlPanel({
           <div className="p-6">
             {restrictedCryptoCount > 0 && (
               <div className="mb-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-                {restrictedCryptoCount} crypto balance{restrictedCryptoCount === 1 ? '' : 's'} hidden from swap controls until marked available.
+                {getLocalizedRestrictedBalanceCountMessage(t, 'exchangeCrypto', restrictedCryptoCount)}
               </div>
             )}
 

@@ -2321,7 +2321,7 @@ function BalanceStatusControlCard({
     : `All balances are currently ${getBalanceStatusLabel(currentStatus).toLowerCase()}.`;
 
   return (
-    <section className="overflow-hidden rounded-[28px] border border-[#006446]/12 bg-white shadow-[0_24px_60px_-48px_rgba(0,100,70,0.45)]">
+    <section className="relative overflow-visible rounded-[28px] border border-[#006446]/12 bg-white shadow-[0_24px_60px_-48px_rgba(0,100,70,0.45)]">
       <div className="border-b border-[#006446]/10 bg-gradient-to-r from-[#006446]/[0.12] via-[#006446]/[0.04] to-white px-5 py-5 sm:px-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="flex min-w-0 items-start gap-4">
@@ -2349,7 +2349,7 @@ function BalanceStatusControlCard({
       </div>
 
       <div className="grid gap-4 px-5 py-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
-        <label className="space-y-2">
+        <label className="relative z-[60] space-y-2">
           <span className="text-sm font-medium text-slate-700">Set customer balance status</span>
           <Dropdown
             value={value}

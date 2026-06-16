@@ -32,10 +32,13 @@ import {
 import { useLanguage } from '../../contexts/LanguageContext';
 import {
   getBalanceStatusClasses,
-  getBalanceStatusLabel,
-  getHiddenBalanceLabel,
   isBalanceAvailable,
 } from '../../lib/balanceStatus';
+import {
+  getLocalizedBalanceRestrictionMessage,
+  getLocalizedBalanceStatusLabel,
+  getLocalizedHiddenBalanceLabel,
+} from '../../lib/balanceStatusI18n';
 import '../../i18n/dashboard-transfers/translations';
 
 function formatCurrency(amount: number, currency: string) {
@@ -765,14 +768,14 @@ function CryptoBalancesSidebar({
                   {bal && !isBalanceAvailable(bal.status) ? (
                     <div className="mt-1">
                       <span className={`rounded-full border px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.14em] ${getBalanceStatusClasses(bal.status)}`}>
-                        {getBalanceStatusLabel(bal.status)}
+                        {getLocalizedBalanceStatusLabel(t, bal.status)}
                       </span>
                     </div>
                   ) : null}
                 </div>
               </div>
               <span className={`text-xs font-semibold tabular-nums ${canShowAmount ? 'text-slate-900' : 'text-slate-500'}`}>
-                {canShowAmount ? formatCryptoAmount(amount, w.symbol) : getHiddenBalanceLabel(bal?.status)}
+                {canShowAmount ? formatCryptoAmount(amount, w.symbol) : getLocalizedHiddenBalanceLabel(t, bal?.status)}
               </span>
             </div>
           );
@@ -781,7 +784,7 @@ function CryptoBalancesSidebar({
 
       {restrictedCount > 0 ? (
         <p className="mt-3 text-xs text-slate-500">
-          Restricted crypto balances stay hidden until marked available in CRM admin.
+          {getLocalizedBalanceRestrictionMessage(t, 'transfers')}
         </p>
       ) : null}
     </div>

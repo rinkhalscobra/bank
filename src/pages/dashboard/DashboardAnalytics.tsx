@@ -20,6 +20,7 @@ import {
 } from '../../components/dashboard/AnalyticsCards';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { isBalanceAvailable } from '../../lib/balanceStatus';
+import { getLocalizedRestrictedBalanceCountMessage } from '../../lib/balanceStatusI18n';
 import '../../i18n/dashboard-analytics/translations';
 
 const FIAT_USD: Record<string, number> = { USD: 1, EUR: 1.08, CAD: 0.74 };
@@ -145,7 +146,7 @@ export default function DashboardAnalytics() {
 
       {restrictedBalanceCount > 0 ? (
         <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-          {restrictedBalanceCount} restricted balance{restrictedBalanceCount === 1 ? '' : 's'} hidden from analytics until marked available.
+          {getLocalizedRestrictedBalanceCountMessage(t, 'analytics', restrictedBalanceCount)}
         </div>
       ) : null}
 

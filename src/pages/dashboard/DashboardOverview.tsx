@@ -27,11 +27,15 @@ import { useTaxSummary } from '../../hooks/useTaxSummary';
 import { useLanguage } from '../../contexts/LanguageContext';
 import {
   getBalanceStatusClasses,
-  getBalanceStatusLabel,
-  getHiddenBalanceDescription,
-  getHiddenBalanceLabel,
   isBalanceAvailable,
+  normalizeBalanceStatus,
 } from '../../lib/balanceStatus';
+import {
+  getLocalizedBalanceCardEyebrow,
+  getLocalizedBalanceCardTitle,
+  getLocalizedBalanceStatusLabel,
+  getLocalizedRestrictedBalanceCountMessage,
+} from '../../lib/balanceStatusI18n';
 import '../../i18n/dashboardOverview/translations';
 
 const CURRENCY_CONFIG: Record<string, { symbol: string; locale: string }> = {
@@ -85,6 +89,41 @@ function bankingStatusClasses(status: string) {
   if (normalized === 'pending') return 'border-amber-200 bg-amber-50 text-amber-700';
   if (normalized === 'failed' || normalized === 'rejected' || normalized === 'cancelled') return 'border-red-200 bg-red-50 text-red-600';
   return 'border-slate-200 bg-slate-50 text-slate-600';
+}
+
+function RestrictedBalanceState({
+  status,
+  t,
+}: {
+  status: unknown;
+  t: (key: string) => string;
+}) {
+  const normalizedStatus = normalizeBalanceStatus(status);
+  const isPending = normalizedStatus === 'pending';
+  const Icon = isPending ? Clock : PauseCircle;
+  const panelClasses = isPending
+    ? 'border-amber-200/80 bg-amber-50/60'
+    : 'border-slate-200 bg-slate-100/80';
+  const iconWrapClasses = isPending
+    ? 'bg-amber-100 text-amber-700'
+    : 'bg-slate-200 text-slate-700';
+  const eyebrowClasses = isPending ? 'text-amber-700' : 'text-slate-600';
+
+  return (
+    <div className={`mt-4 rounded-2xl border p-4 ${panelClasses}`}>
+      <div className="flex items-start gap-3">
+        <div className={`mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${iconWrapClasses}`}>
+          <Icon className="h-5 w-5" />
+        </div>
+        <div className="min-w-0">
+          <p className={`text-[11px] font-semibold uppercase tracking-[0.18em] ${eyebrowClasses}`}>
+            {getLocalizedBalanceCardEyebrow(t, status)}
+          </p>
+          <p className="mt-1 text-lg font-semibold text-slate-900">{getLocalizedBalanceCardTitle(t, status)}</p>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export default function DashboardOverview() {
@@ -196,6 +235,7 @@ export default function DashboardOverview() {
           {fiatBalances.map((fb) => {
             const CurrIcon = CURRENCY_ICONS[fb.currency] || DollarSign;
             const canShowAmount = showBalances && isBalanceAvailable(fb.status);
+            const showRestrictedState = showBalances && !isBalanceAvailable(fb.status);
 
             return (
               <div
@@ -203,7 +243,7 @@ export default function DashboardOverview() {
                 className={`border p-5 shadow-[0_24px_60px_-48px_rgba(0,100,70,0.45)] transition-all duration-200 hover:shadow-[0_24px_70px_-44px_rgba(0,100,70,0.55)] ${
                   isBalanceAvailable(fb.status)
                     ? 'border-[#006446]/14 bg-white hover:border-[#006446]/30'
-                    : 'border-slate-200 bg-slate-50/70 hover:border-slate-300'
+                    : 'border-slate-200 bg-white hover:border-slate-300'
                 }`}
               >
                 <div className="flex items-center justify-between mb-3">
@@ -216,7 +256,7 @@ export default function DashboardOverview() {
                     </span>
                   </div>
                   <span className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] ${getBalanceStatusClasses(fb.status)}`}>
-                    {getBalanceStatusLabel(fb.status)}
+                    {getLocalizedBalanceStatusLabel(t, fb.status)}
                   </span>
                 </div>
                 <p className="text-sm font-medium text-slate-700 mb-1">
@@ -226,16 +266,13 @@ export default function DashboardOverview() {
                     ? t('dashboardOverview.currencies.eur')
                     : t('dashboardOverview.currencies.cad')}
                 </p>
-                <p className={`text-2xl font-bold ${canShowAmount ? 'text-slate-900' : 'text-slate-500'}`}>
-                  {canShowAmount
-                    ? formatCurrency(fb.balance, fb.currency)
-                    : showBalances
-                    ? getHiddenBalanceLabel(fb.status)
-                    : '****'}
-                </p>
-                {!isBalanceAvailable(fb.status) && showBalances ? (
-                  <p className="mt-2 text-xs text-slate-500">{getHiddenBalanceDescription(fb.status)}</p>
-                ) : null}
+                {showRestrictedState ? (
+                  <RestrictedBalanceState status={fb.status} t={t} />
+                ) : (
+                  <p className={`text-2xl font-bold ${canShowAmount ? 'text-slate-900' : 'text-slate-500'}`}>
+                    {canShowAmount ? formatCurrency(fb.balance, fb.currency) : '****'}
+                  </p>
+                )}
               </div>
             );
           })}
@@ -252,6 +289,7 @@ export default function DashboardOverview() {
               .sort((a, b) => (CRYPTO_SORT_ORDER[a.symbol] ?? 99) - (CRYPTO_SORT_ORDER[b.symbol] ?? 99))
               .map((crypto) => {
                 const canShowAmount = showBalances && isBalanceAvailable(crypto.status);
+                const showRestrictedState = showBalances && !isBalanceAvailable(crypto.status);
 
                 return (
                   <div
@@ -259,7 +297,7 @@ export default function DashboardOverview() {
                     className={`border p-5 shadow-[0_24px_60px_-48px_rgba(0,100,70,0.45)] transition-all duration-200 hover:shadow-[0_24px_70px_-44px_rgba(0,100,70,0.55)] ${
                       isBalanceAvailable(crypto.status)
                         ? 'border-[#006446]/14 bg-white hover:border-[#006446]/30'
-                        : 'border-slate-200 bg-slate-50/70 hover:border-slate-300'
+                        : 'border-slate-200 bg-white hover:border-slate-300'
                     }`}
                   >
                     <div className="mb-3 flex items-center justify-between gap-2.5">
@@ -280,23 +318,22 @@ export default function DashboardOverview() {
                         </span>
                       </div>
                       <span className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] ${getBalanceStatusClasses(crypto.status)}`}>
-                        {getBalanceStatusLabel(crypto.status)}
+                        {getLocalizedBalanceStatusLabel(t, crypto.status)}
                       </span>
                     </div>
                     <p className="text-sm font-medium text-slate-700 mb-1">{crypto.name}</p>
-                    <p className={`text-2xl font-bold ${canShowAmount ? 'text-slate-900' : 'text-slate-500'}`}>
-                      {canShowAmount
-                        ? crypto.balance.toLocaleString('en-US', {
-                            minimumFractionDigits: 2,
-                            maximumFractionDigits: 4,
-                          })
-                        : showBalances
-                        ? getHiddenBalanceLabel(crypto.status)
-                        : '****'}
-                    </p>
-                    {!isBalanceAvailable(crypto.status) && showBalances ? (
-                      <p className="mt-2 text-xs text-slate-500">{getHiddenBalanceDescription(crypto.status)}</p>
-                    ) : null}
+                    {showRestrictedState ? (
+                      <RestrictedBalanceState status={crypto.status} t={t} />
+                    ) : (
+                      <p className={`text-2xl font-bold ${canShowAmount ? 'text-slate-900' : 'text-slate-500'}`}>
+                        {canShowAmount
+                          ? crypto.balance.toLocaleString('en-US', {
+                              minimumFractionDigits: 2,
+                              maximumFractionDigits: 4,
+                            })
+                          : '****'}
+                      </p>
+                    )}
                   </div>
                 );
               })}
@@ -306,7 +343,7 @@ export default function DashboardOverview() {
 
       {restrictedBalanceCount > 0 ? (
         <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-          {restrictedBalanceCount} restricted balance{restrictedBalanceCount === 1 ? '' : 's'} hidden from charts and totals until marked available.
+          {getLocalizedRestrictedBalanceCountMessage(t, 'overview', restrictedBalanceCount)}
         </div>
       ) : null}
 
