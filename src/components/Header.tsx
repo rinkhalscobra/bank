@@ -3,6 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { useState, useRef, useEffect } from 'react';
 import { useLanguage, languages } from '../contexts/LanguageContext';
 import { useBranding } from '../contexts/BrandingContext';
+import BrandLogo from './ui/BrandLogo';
 import '../i18n/header/translations';
 
 export default function Header() {
@@ -62,7 +63,7 @@ export default function Header() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-20">
           <Link to="/" className="flex items-center group">
-            <img
+            <BrandLogo
               src={branding.navbarLogoUrl}
               alt={branding.brandName}
               className="h-12 w-auto object-contain"

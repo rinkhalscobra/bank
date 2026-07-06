@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useCookieConsent } from '../contexts/CookieConsentContext';
 import { useBranding } from '../contexts/BrandingContext';
 import { useLanguage } from '../contexts/LanguageContext';
+import BrandLogo from './ui/BrandLogo';
 import '../i18n/footer/translations';
 
 export default function Footer() {
@@ -49,7 +50,7 @@ export default function Footer() {
 
             <div className="relative">
               <Link to="/" className="mb-8 inline-flex items-center">
-                <img
+                <BrandLogo
                   src={branding.footerLogoUrl}
                   alt={branding.brandName}
                   className="h-12 w-auto object-contain"

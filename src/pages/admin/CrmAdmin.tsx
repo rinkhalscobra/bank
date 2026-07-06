@@ -23,6 +23,7 @@ import {
   X,
   type LucideIcon,
 } from 'lucide-react';
+import BrandLogo from '../../components/ui/BrandLogo';
 import Dropdown from '../../components/ui/Dropdown';
 import { useAuth } from '../../contexts/AuthContext';
 import {
@@ -1738,12 +1739,12 @@ function BrandingSettingsCard({
             <div className="space-y-4">
               <div className="rounded-2xl border border-[#006446]/10 bg-white p-4">
                 <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-[#006446]">Navbar</p>
-                <img src={previewBranding.navbarLogoUrl} alt={previewBranding.brandName} className="h-12 max-w-full object-contain" />
+                <BrandLogo src={previewBranding.navbarLogoUrl} alt={previewBranding.brandName} className="h-12 max-w-full object-contain" />
               </div>
 
               <div className="rounded-2xl border border-[#006446]/10 bg-[#006446]/[0.03] p-4">
                 <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-[#006446]">Footer</p>
-                <img src={previewBranding.footerLogoUrl} alt={previewBranding.brandName} className="h-12 max-w-full object-contain" />
+                <BrandLogo src={previewBranding.footerLogoUrl} alt={previewBranding.brandName} className="h-12 max-w-full object-contain" />
               </div>
             </div>
           </div>

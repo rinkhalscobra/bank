@@ -1,4 +1,5 @@
 import { useBranding } from '../../contexts/BrandingContext';
+import BrandLogo from './BrandLogo';
 
 export default function LoadingScreen() {
   const { branding } = useBranding();
@@ -7,7 +8,7 @@ export default function LoadingScreen() {
     <div className="flex min-h-screen items-center justify-center bg-[#f7f9f8] px-6 text-surface-900">
       <div className="flex w-full max-w-[320px] flex-col items-center gap-7">
         <div className="flex items-center gap-3">
-          <img src={branding.navbarLogoUrl} alt={branding.brandName} className="h-9 w-auto object-contain" />
+          <BrandLogo src={branding.navbarLogoUrl} alt={branding.brandName} className="h-9 w-auto object-contain" />
         </div>
 
         <div className="w-full space-y-3 text-center">
