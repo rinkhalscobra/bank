@@ -23,7 +23,7 @@ import { isBalanceAvailable } from '../../lib/balanceStatus';
 import { getLocalizedRestrictedBalanceCountMessage } from '../../lib/balanceStatusI18n';
 import '../../i18n/dashboard-analytics/translations';
 
-const FIAT_USD: Record<string, number> = { USD: 1, EUR: 1.08, CAD: 0.74 };
+const FIAT_USD: Record<string, number> = { USD: 1, EUR: 1.08, CAD: 0.74, CHF: 1.12 };
 const CRYPTO_USD: Record<string, number> = { BTC: 62000, ETH: 3400, SOL: 145, USDC: 1, USDT: 1 };
 
 export default function DashboardAnalytics() {

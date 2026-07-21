@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { normalizeBalanceStatus, type BalanceAvailabilityStatus } from '../lib/balanceStatus';
@@ -20,7 +20,7 @@ export function useFiatBalances(targetUserId?: string) {
   const [loading, setLoading] = useState(true);
   const resolvedUserId = targetUserId ?? user?.id ?? null;
 
-  const fetchFiatBalances = async () => {
+  const fetchFiatBalances = useCallback(async () => {
     if (!resolvedUserId) {
       setFiatBalances([]);
       setLoading(false);
@@ -54,11 +54,11 @@ export function useFiatBalances(targetUserId?: string) {
       .sort((left, right) => left.display_order - right.display_order);
     setFiatBalances(normalized);
     setLoading(false);
-  };
+  }, [resolvedUserId]);
 
   useEffect(() => {
     void fetchFiatBalances();
-  }, [resolvedUserId]);
+  }, [fetchFiatBalances]);
 
   return { fiatBalances, loading, refetch: fetchFiatBalances };
 }

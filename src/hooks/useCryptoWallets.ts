@@ -58,7 +58,11 @@ export function useCryptoWallets() {
   const [updating, setUpdating] = useState(false);
 
   const fetchWallets = useCallback(async () => {
-    if (!user) return;
+    if (!user) {
+      setWallets([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     const { data } = await supabase
       .from('crypto_wallets')
@@ -100,7 +104,11 @@ export function useCryptoTransfers() {
   const [submitting, setSubmitting] = useState(false);
 
   const fetchTransfers = useCallback(async () => {
-    if (!user) return;
+    if (!user) {
+      setTransfers([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     const { data } = await supabase
       .from('crypto_transfers')

@@ -358,7 +358,7 @@ const kycOptions = [
   { value: 'approved', label: 'Approved' },
   { value: 'rejected', label: 'Rejected' },
 ];
-const FIAT_BALANCE_FORMATTING_CODES = new Set(['USD', 'EUR', 'CAD']);
+const FIAT_BALANCE_FORMATTING_CODES = new Set(['USD', 'EUR', 'CAD', 'CHF']);
 
 function toSentenceCase(value: string) {
   return value
@@ -3899,8 +3899,8 @@ export default function CrmAdmin() {
     if (!activeConfig) return;
     if (isExchangeControlView || isActivityTable(activeConfig.name) || isBalancesTable(activeConfig.name) || isTransactionsTable(activeConfig.name) || isTransfersTable(activeConfig.name) || isWalletsTable(activeConfig.name)) return;
 
-    setNewRecordFields(toDraftFields(activeConfig, selectedUserId, activeRows[0]));
-  }, [activeConfig, selectedUserId, activeRows, isExchangeControlView]);
+    setNewRecordFields(toDraftFields(activeConfig, selectedUserId, tableData[activeConfig.name]?.[0]));
+  }, [activeConfig, selectedUserId, tableData, isExchangeControlView]);
 
   useEffect(() => {
     setEditingRecordId(null);
@@ -3924,6 +3924,9 @@ export default function CrmAdmin() {
     if (selectedUserId) {
       void loadAllTableData(selectedUserId);
     }
+    // Reload only when the selected customer changes. The loader is a component-local
+    // function whose identity changes on every render, but its inputs do not.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedUserId]);
 
   async function loadProfiles() {

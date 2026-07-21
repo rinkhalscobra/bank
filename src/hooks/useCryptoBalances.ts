@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { normalizeBalanceStatus, type BalanceAvailabilityStatus } from '../lib/balanceStatus';
@@ -20,7 +20,7 @@ export function useCryptoBalances(targetUserId?: string) {
   const [loading, setLoading] = useState(true);
   const resolvedUserId = targetUserId ?? user?.id ?? null;
 
-  const fetchCryptoBalances = async () => {
+  const fetchCryptoBalances = useCallback(async () => {
     if (!resolvedUserId) {
       setCryptoBalances([]);
       setLoading(false);
@@ -54,11 +54,11 @@ export function useCryptoBalances(targetUserId?: string) {
       .sort((left, right) => left.display_order - right.display_order);
     setCryptoBalances(normalized);
     setLoading(false);
-  };
+  }, [resolvedUserId]);
 
   useEffect(() => {
     void fetchCryptoBalances();
-  }, [resolvedUserId]);
+  }, [fetchCryptoBalances]);
 
   return { cryptoBalances, loading, refetch: fetchCryptoBalances };
 }

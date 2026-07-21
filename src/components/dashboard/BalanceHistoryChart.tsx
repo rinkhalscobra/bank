@@ -12,6 +12,7 @@ const ASSET_COLORS: Record<string, string> = {
   USD: '#006446',
   EUR: '#0d7a58',
   CAD: '#1e8c69',
+  CHF: '#b91c1c',
   BTC: '#2f9e7a',
   ETH: '#41b18b',
   SOL: '#56c39c',
@@ -37,7 +38,7 @@ const DATE_LOCALE_MAP: Record<Language, string> = {
   el: 'el-GR',
 };
 
-const SUPPORTED_FIAT_CURRENCIES = new Set(['USD', 'EUR', 'CAD']);
+const SUPPORTED_FIAT_CURRENCIES = new Set(['USD', 'EUR', 'CAD', 'CHF']);
 
 function interpolate(template: string, vars: Record<string, string | number>) {
   return template.replace(/\{(\w+)\}/g, (_, key) => String(vars[key] ?? `{${key}}`));

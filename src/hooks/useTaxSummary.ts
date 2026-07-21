@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import { normalizeTaxStatus, summarizeTaxAmounts, type TaxStatus } from '../lib/taxStatus';
@@ -32,7 +32,7 @@ export function useTaxSummary() {
   const [summary, setSummary] = useState(emptyTaxSummary);
   const [loading, setLoading] = useState(true);
 
-  const fetchTaxSummary = async () => {
+  const fetchTaxSummary = useCallback(async () => {
     if (!user) {
       setSummary(emptyTaxSummary());
       setLoading(false);
@@ -59,11 +59,11 @@ export function useTaxSummary() {
 
     setSummary(summarizeTaxAmounts((legacyResult.data as unknown[]) || []));
     setLoading(false);
-  };
+  }, [user]);
 
   useEffect(() => {
     void fetchTaxSummary();
-  }, [user]);
+  }, [fetchTaxSummary]);
 
   return { summary, loading, refetch: fetchTaxSummary };
 }

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -37,8 +37,12 @@ export function useLoans() {
   const [loans, setLoans] = useState<Loan[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const fetchLoans = async () => {
-    if (!user) return;
+  const fetchLoans = useCallback(async () => {
+    if (!user) {
+      setLoans([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     const { data } = await supabase
       .from('loans')
@@ -47,7 +51,7 @@ export function useLoans() {
       .order('created_at', { ascending: false });
     setLoans((data as Loan[]) || []);
     setLoading(false);
-  };
+  }, [user]);
 
   const applyForLoan = async (params: {
     loanType: string;
@@ -101,8 +105,8 @@ export function useLoans() {
   };
 
   useEffect(() => {
-    fetchLoans();
-  }, [user]);
+    void fetchLoans();
+  }, [fetchLoans]);
 
   return { loans, loading, refetch: fetchLoans, applyForLoan, makePayment };
 }

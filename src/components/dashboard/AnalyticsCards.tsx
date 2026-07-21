@@ -8,7 +8,7 @@ import {
 import { useLanguage, type Language } from '../../contexts/LanguageContext';
 import '../../i18n/dashboardcards/translations';
 
-const FIAT_USD: Record<string, number> = { USD: 1, EUR: 1.08, CAD: 0.74 };
+const FIAT_USD: Record<string, number> = { USD: 1, EUR: 1.08, CAD: 0.74, CHF: 1.12 };
 const CRYPTO_USD: Record<string, number> = { BTC: 62000, ETH: 3400, SOL: 145, USDC: 1, USDT: 1 };
 
 const LOCALE_MAP: Record<Language, string> = {

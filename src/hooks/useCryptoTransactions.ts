@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -27,8 +27,12 @@ export function useCryptoTransactions() {
   const [transactions, setTransactions] = useState<CryptoTransaction[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const fetchTransactions = async () => {
-    if (!user) return;
+  const fetchTransactions = useCallback(async () => {
+    if (!user) {
+      setTransactions([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     const { data } = await supabase
       .from('crypto_transactions')
@@ -57,11 +61,11 @@ export function useCryptoTransactions() {
     }));
     setTransactions(normalized);
     setLoading(false);
-  };
+  }, [user]);
 
   useEffect(() => {
-    fetchTransactions();
-  }, [user]);
+    void fetchTransactions();
+  }, [fetchTransactions]);
 
   return { transactions, loading, refetch: fetchTransactions };
 }

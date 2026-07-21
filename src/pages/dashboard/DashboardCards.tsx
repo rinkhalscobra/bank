@@ -173,6 +173,7 @@ export default function DashboardCards() {
     { value: 'BE', label: t('dashboardCards.countries.BE') },
     { value: 'AT', label: t('dashboardCards.countries.AT') },
     { value: 'ES', label: t('dashboardCards.countries.ES') },
+    { value: 'CH', label: t('dashboardCards.countries.CH') },
     { value: 'IT', label: t('dashboardCards.countries.IT') },
     { value: 'PT', label: t('dashboardCards.countries.PT') },
     { value: 'IE', label: t('dashboardCards.countries.IE') },
@@ -183,6 +184,7 @@ export default function DashboardCards() {
     { value: 'USD', label: t('dashboardCards.currencies.USD') },
     { value: 'EUR', label: t('dashboardCards.currencies.EUR') },
     { value: 'CAD', label: t('dashboardCards.currencies.CAD') },
+    { value: 'CHF', label: t('dashboardCards.currencies.CHF') },
   ];
 
   const DAILY_LIMIT_OPTIONS = [1000, 2500, 5000, 10000, 25000];

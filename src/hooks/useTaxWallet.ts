@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -15,8 +15,12 @@ export function useTaxWallet() {
   const [wallet, setWallet] = useState<TaxWallet | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const fetchWallet = async () => {
-    if (!user) return;
+  const fetchWallet = useCallback(async () => {
+    if (!user) {
+      setWallet(null);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
 
     const { data } = await supabase
@@ -37,11 +41,11 @@ export function useTaxWallet() {
     }
 
     setLoading(false);
-  };
+  }, [user]);
 
   useEffect(() => {
-    fetchWallet();
-  }, [user]);
+    void fetchWallet();
+  }, [fetchWallet]);
 
   return { wallet, loading };
 }

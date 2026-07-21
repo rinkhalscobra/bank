@@ -50,7 +50,11 @@ export function useTransfers() {
   const [submitting, setSubmitting] = useState(false);
 
   const fetchTransfers = useCallback(async () => {
-    if (!user) return;
+    if (!user) {
+      setTransfers([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     const { data } = await supabase
       .from('bank_transfers')

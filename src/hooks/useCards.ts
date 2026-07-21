@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -49,8 +49,13 @@ export function useCards() {
   const [pendingApplications, setPendingApplications] = useState<Card[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const fetchCards = async () => {
-    if (!user) return;
+  const fetchCards = useCallback(async () => {
+    if (!user) {
+      setCards([]);
+      setPendingApplications([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     const { data } = await supabase
       .from('cards')
@@ -61,7 +66,7 @@ export function useCards() {
     setPendingApplications(allCards.filter((card) => card.status === 'pending_approval'));
     setCards(allCards.filter((card) => card.status !== 'pending_approval'));
     setLoading(false);
-  };
+  }, [user]);
 
   const toggleFreeze = async (cardId: string, currentStatus: string) => {
     if (!user) return;
@@ -115,8 +120,8 @@ export function useCards() {
   };
 
   useEffect(() => {
-    fetchCards();
-  }, [user]);
+    void fetchCards();
+  }, [fetchCards]);
 
   return { cards, pendingApplications, loading, refetch: fetchCards, toggleFreeze, createCard };
 }

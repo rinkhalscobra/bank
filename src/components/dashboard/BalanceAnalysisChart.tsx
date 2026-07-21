@@ -15,12 +15,14 @@ const APPROX_USD_RATES: Record<string, number> = {
   USD: 1,
   EUR: 1.08,
   CAD: 0.74,
+  CHF: 1.12,
 };
 
 const FIAT_COLORS: Record<string, string> = {
   USD: '#2563eb',
   EUR: '#16a34a',
   CAD: '#d97706',
+  CHF: '#dc2626',
 };
 
 const APPROX_CRYPTO_USD: Record<string, number> = {
@@ -54,24 +56,6 @@ const UI_COLORS = {
   hiddenRing: '#d7e0ea',
   hiddenText: '#64748b',
   tooltip: '#1e293b',
-};
-
-const SUMMARY_CARD_STYLES = {
-  total: {
-    background: UI_COLORS.softSurface,
-    label: '#2563eb',
-    border: '#dbeafe',
-  },
-  fiat: {
-    background: UI_COLORS.softSurfaceAlt,
-    label: '#16a34a',
-    border: '#dcfce7',
-  },
-  crypto: {
-    background: UI_COLORS.warmSurface,
-    label: '#9333ea',
-    border: '#eadcff',
-  },
 };
 
 function formatUsd(amount: number) {
@@ -394,6 +378,7 @@ export default function BalanceAnalysisChart({
     USD: t('balanceAnalysis.currencies.usd'),
     EUR: t('balanceAnalysis.currencies.eur'),
     CAD: t('balanceAnalysis.currencies.cad'),
+    CHF: t('balanceAnalysis.currencies.chf'),
   };
 
   const fiatUsdValues = fiatBalances.map((fb) => ({
@@ -410,18 +395,12 @@ export default function BalanceAnalysisChart({
       color: CRYPTO_COLORS[c.symbol] || '#94a3b8',
     }));
 
-  const totalFiat = fiatUsdValues.reduce((s, f) => s + f.value, 0);
-  const totalCrypto = cryptoUsdValues.reduce((s, c) => s + c.value, 0);
-
   const filteredDonutSegments =
     dataFilter === 'fiat'
       ? fiatUsdValues
       : dataFilter === 'crypto'
       ? cryptoUsdValues
       : [...fiatUsdValues, ...cryptoUsdValues];
-
-  const filteredTotal =
-    dataFilter === 'fiat' ? totalFiat : dataFilter === 'crypto' ? totalCrypto : totalFiat + totalCrypto;
 
   const fiatBarItems = fiatBalances.map((fb) => ({
     label: `${fb.name.trim() || CURRENCY_NAMES[fb.currency] || fb.currency} (${fb.currency})`,

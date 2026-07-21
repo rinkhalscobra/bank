@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -25,8 +25,12 @@ export function useAddFund() {
   const [deposits, setDeposits] = useState<CryptoDeposit[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const fetchDeposits = async () => {
-    if (!user) return;
+  const fetchDeposits = useCallback(async () => {
+    if (!user) {
+      setDeposits([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     const { data } = await supabase
       .from('crypto_deposits')
@@ -35,7 +39,7 @@ export function useAddFund() {
       .order('created_at', { ascending: false });
     setDeposits((data as CryptoDeposit[]) || []);
     setLoading(false);
-  };
+  }, [user]);
 
   const addFund = async (params: { symbol: string; cryptoName: string; amount: number }) => {
     if (!user) return { error: 'Not authenticated' };
@@ -54,8 +58,8 @@ export function useAddFund() {
   };
 
   useEffect(() => {
-    fetchDeposits();
-  }, [user]);
+    void fetchDeposits();
+  }, [fetchDeposits]);
 
   return { deposits, loading, refetch: fetchDeposits, addFund };
 }

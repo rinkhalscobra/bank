@@ -42,12 +42,14 @@ const CURRENCY_CONFIG: Record<string, { symbol: string; locale: string }> = {
   USD: { symbol: 'USD', locale: 'en-US' },
   EUR: { symbol: 'EUR', locale: 'de-DE' },
   CAD: { symbol: 'CAD', locale: 'en-CA' },
+  CHF: { symbol: 'CHF', locale: 'de-CH' },
 };
 
 const CURRENCY_ICONS: Record<string, typeof DollarSign> = {
   USD: DollarSign,
   EUR: Euro,
   CAD: DollarSign,
+  CHF: DollarSign,
 };
 
 const CRYPTO_LOGOS: Record<string, string> = {
@@ -150,6 +152,7 @@ export default function DashboardOverview() {
     if (currency === 'USD') return t('dashboardOverview.currencies.usd');
     if (currency === 'EUR') return t('dashboardOverview.currencies.eur');
     if (currency === 'CAD') return t('dashboardOverview.currencies.cad');
+    if (currency === 'CHF') return t('dashboardOverview.currencies.chf');
 
     try {
       return new Intl.DisplayNames([language], { type: 'currency' }).of(currency) || currency;

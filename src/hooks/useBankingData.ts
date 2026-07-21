@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -31,8 +31,12 @@ export function useTransactions() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const fetchTransactions = async () => {
-    if (!user) return;
+  const fetchTransactions = useCallback(async () => {
+    if (!user) {
+      setTransactions([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     const { data } = await supabase
       .from('transactions')
@@ -58,11 +62,11 @@ export function useTransactions() {
     }));
     setTransactions(normalized);
     setLoading(false);
-  };
+  }, [user]);
 
   useEffect(() => {
-    fetchTransactions();
-  }, [user]);
+    void fetchTransactions();
+  }, [fetchTransactions]);
 
   return { transactions, loading, refetch: fetchTransactions };
 }
@@ -72,8 +76,12 @@ export function useProfile() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const fetchProfile = async () => {
-    if (!user) return;
+  const fetchProfile = useCallback(async () => {
+    if (!user) {
+      setProfile(null);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     const { data } = await supabase
       .from('profiles')
@@ -82,7 +90,7 @@ export function useProfile() {
       .maybeSingle();
     setProfile(data);
     setLoading(false);
-  };
+  }, [user]);
 
   const updateProfile = async (updates: Partial<Profile>) => {
     if (!user) return;
@@ -95,8 +103,8 @@ export function useProfile() {
   };
 
   useEffect(() => {
-    fetchProfile();
-  }, [user]);
+    void fetchProfile();
+  }, [fetchProfile]);
 
   return { profile, loading, updateProfile, refetch: fetchProfile };
 }

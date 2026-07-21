@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -39,8 +39,14 @@ export function useBalanceHistory() {
   const [assetSeries, setAssetSeries] = useState<AssetSeries[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const fetchSnapshots = async () => {
-    if (!user) return;
+  const fetchSnapshots = useCallback(async () => {
+    if (!user) {
+      setSnapshots([]);
+      setDailyTotals([]);
+      setAssetSeries([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     const { data } = await supabase
       .from('balance_snapshots')
@@ -112,11 +118,11 @@ export function useBalanceHistory() {
     setDailyTotals(totals);
     setAssetSeries(series);
     setLoading(false);
-  };
+  }, [user]);
 
   useEffect(() => {
-    fetchSnapshots();
-  }, [user]);
+    void fetchSnapshots();
+  }, [fetchSnapshots]);
 
   return { snapshots, dailyTotals, assetSeries, loading, refetch: fetchSnapshots };
 }

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { normalizeTaxStatus, type TaxStatus } from '../lib/taxStatus';
@@ -24,8 +24,12 @@ export function useTaxes() {
   const [taxes, setTaxes] = useState<Tax[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const fetchTaxes = async () => {
-    if (!user) return;
+  const fetchTaxes = useCallback(async () => {
+    if (!user) {
+      setTaxes([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     const { data } = await supabase
       .from('taxes')
@@ -34,7 +38,7 @@ export function useTaxes() {
       .order('due_date', { ascending: false });
     setTaxes(((data as Tax[]) || []).map((tax) => ({ ...tax, status: normalizeTaxStatus(tax.status) })));
     setLoading(false);
-  };
+  }, [user]);
 
   const addTax = async (params: {
     taxType: string;
@@ -80,8 +84,8 @@ export function useTaxes() {
   };
 
   useEffect(() => {
-    fetchTaxes();
-  }, [user]);
+    void fetchTaxes();
+  }, [fetchTaxes]);
 
   return { taxes, loading, refetch: fetchTaxes, addTax, makePayment };
 }

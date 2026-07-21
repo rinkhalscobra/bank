@@ -23,6 +23,7 @@ registerTranslations({
     'balanceAnalysis.currencies.usd': 'US Dollar',
     'balanceAnalysis.currencies.eur': 'Euro',
     'balanceAnalysis.currencies.cad': 'Canadian Dollar',
+    'balanceAnalysis.currencies.chf': 'Swiss Franc',
   },
 
   fr: {
@@ -47,6 +48,7 @@ registerTranslations({
     'balanceAnalysis.currencies.usd': 'Dollar américain',
     'balanceAnalysis.currencies.eur': 'Euro',
     'balanceAnalysis.currencies.cad': 'Dollar canadien',
+    'balanceAnalysis.currencies.chf': 'Franc suisse',
   },
 
   de: {
@@ -71,6 +73,7 @@ registerTranslations({
     'balanceAnalysis.currencies.usd': 'US-Dollar',
     'balanceAnalysis.currencies.eur': 'Euro',
     'balanceAnalysis.currencies.cad': 'Kanadischer Dollar',
+    'balanceAnalysis.currencies.chf': 'Schweizer Franken',
   },
 
   es: {
@@ -95,6 +98,7 @@ registerTranslations({
     'balanceAnalysis.currencies.usd': 'Dólar estadounidense',
     'balanceAnalysis.currencies.eur': 'Euro',
     'balanceAnalysis.currencies.cad': 'Dólar canadiense',
+    'balanceAnalysis.currencies.chf': 'Franco suizo',
   },
 
   it: {
@@ -119,6 +123,7 @@ registerTranslations({
     'balanceAnalysis.currencies.usd': 'Dollaro USA',
     'balanceAnalysis.currencies.eur': 'Euro',
     'balanceAnalysis.currencies.cad': 'Dollaro canadese',
+    'balanceAnalysis.currencies.chf': 'Franco svizzero',
   },
 
   el: {
@@ -143,5 +148,6 @@ registerTranslations({
     'balanceAnalysis.currencies.usd': 'Δολάριο ΗΠΑ',
     'balanceAnalysis.currencies.eur': 'Ευρώ',
     'balanceAnalysis.currencies.cad': 'Καναδικό δολάριο',
+    'balanceAnalysis.currencies.chf': 'Ελβετικό φράγκο',
   },
 });

@@ -36,6 +36,33 @@ interface RatesResponse {
   fetched_at: string;
 }
 
+async function supplementChfRates(rates: Record<string, Record<string, number>>) {
+  if (rates.CHF?.USD) return rates;
+
+  try {
+    const response = await fetch('https://api.frankfurter.app/latest?from=CHF&to=USD,EUR,CAD');
+    if (!response.ok) return rates;
+
+    const data = await response.json() as { rates?: Record<string, number> };
+    if (!data.rates?.USD) return rates;
+
+    const supplemented = Object.fromEntries(
+      Object.entries(rates).map(([currency, currencyRates]) => [currency, { ...currencyRates }])
+    ) as Record<string, Record<string, number>>;
+    supplemented.CHF = { ...data.rates };
+
+    Object.entries(data.rates).forEach(([currency, rate]) => {
+      if (rate > 0) {
+        supplemented[currency] = { ...(supplemented[currency] || {}), CHF: 1 / rate };
+      }
+    });
+
+    return supplemented;
+  } catch {
+    return rates;
+  }
+}
+
 export function useLiveRates() {
   const [rates, setRates] = useState<Record<string, Record<string, number>>>({});
   const [cryptoPrices, setCryptoPrices] = useState<Record<string, CryptoPrice>>({});
@@ -56,10 +83,11 @@ export function useLiveRates() {
       });
       if (!res.ok) throw new Error('Failed to fetch rates');
       const data: RatesResponse = await res.json();
-      setRates(data.rates);
+      const supplementedRates = await supplementChfRates(data.rates);
+      setRates(supplementedRates);
       setCryptoPrices(data.crypto || {});
       setFetchedAt(data.fetched_at);
-      return data;
+      return { ...data, rates: supplementedRates };
     } catch {
       setError('Unable to load live rates');
       return null;

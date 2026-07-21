@@ -61,7 +61,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .maybeSingle();
 
     if (data) {
-      const nextRole = normalizeCrmRole(data.crm_role, Boolean(data.is_admin) ? 'admin' : 'customer');
+      const nextRole = normalizeCrmRole(data.crm_role, data.is_admin ? 'admin' : 'customer');
       setProfile({
         full_name: data.full_name || '',
         email: data.email || '',

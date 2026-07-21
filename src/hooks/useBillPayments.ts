@@ -32,7 +32,11 @@ export function useBillPayments() {
   const [loading, setLoading] = useState(true);
 
   const fetchPayments = useCallback(async () => {
-    if (!user) return;
+    if (!user) {
+      setPayments([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     const { data } = await supabase
       .from('bill_payments')

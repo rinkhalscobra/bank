@@ -18,6 +18,7 @@ registerTranslations({
     'dashboardOverview.currencies.usd': 'US Dollar',
     'dashboardOverview.currencies.eur': 'Euro',
     'dashboardOverview.currencies.cad': 'Canadian Dollar',
+    'dashboardOverview.currencies.chf': 'Swiss Franc',
 
     'dashboardOverview.tax.title': 'Tax Summary',
     'dashboardOverview.tax.subtitle': 'Your current tax obligations',
@@ -63,6 +64,7 @@ registerTranslations({
     'dashboardOverview.currencies.usd': 'Dollar américain',
     'dashboardOverview.currencies.eur': 'Euro',
     'dashboardOverview.currencies.cad': 'Dollar canadien',
+    'dashboardOverview.currencies.chf': 'Franc suisse',
 
     'dashboardOverview.tax.title': 'Résumé fiscal',
     'dashboardOverview.tax.subtitle': 'Vos obligations fiscales actuelles',
@@ -108,6 +110,7 @@ registerTranslations({
     'dashboardOverview.currencies.usd': 'US-Dollar',
     'dashboardOverview.currencies.eur': 'Euro',
     'dashboardOverview.currencies.cad': 'Kanadischer Dollar',
+    'dashboardOverview.currencies.chf': 'Schweizer Franken',
 
     'dashboardOverview.tax.title': 'Steuerübersicht',
     'dashboardOverview.tax.subtitle': 'Ihre aktuellen Steuerverpflichtungen',
@@ -153,6 +156,7 @@ registerTranslations({
     'dashboardOverview.currencies.usd': 'Dólar estadounidense',
     'dashboardOverview.currencies.eur': 'Euro',
     'dashboardOverview.currencies.cad': 'Dólar canadiense',
+    'dashboardOverview.currencies.chf': 'Franco suizo',
 
     'dashboardOverview.tax.title': 'Resumen fiscal',
     'dashboardOverview.tax.subtitle': 'Tus obligaciones fiscales actuales',
@@ -198,6 +202,7 @@ registerTranslations({
     'dashboardOverview.currencies.usd': 'Dollaro USA',
     'dashboardOverview.currencies.eur': 'Euro',
     'dashboardOverview.currencies.cad': 'Dollaro canadese',
+    'dashboardOverview.currencies.chf': 'Franco svizzero',
 
     'dashboardOverview.tax.title': 'Riepilogo fiscale',
     'dashboardOverview.tax.subtitle': 'I tuoi obblighi fiscali attuali',
@@ -243,6 +248,7 @@ registerTranslations({
     'dashboardOverview.currencies.usd': 'Δολάριο ΗΠΑ',
     'dashboardOverview.currencies.eur': 'Ευρώ',
     'dashboardOverview.currencies.cad': 'Καναδικό δολάριο',
+    'dashboardOverview.currencies.chf': 'Ελβετικό φράγκο',
 
     'dashboardOverview.tax.title': 'Φορολογική σύνοψη',
     'dashboardOverview.tax.subtitle': 'Οι τρέχουσες φορολογικές σας υποχρεώσεις',

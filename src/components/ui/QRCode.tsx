@@ -58,21 +58,6 @@ function getECInfo(version: number) {
   return { ecPerBlock, numBlocks, totalDataCW };
 }
 
-function gfMul(a: number, b: number): number {
-  if (a === 0 || b === 0) return 0;
-  const LOG: number[] = new Array(256);
-  const EXP: number[] = new Array(256);
-  let v = 1;
-  for (let i = 0; i < 255; i++) {
-    EXP[i] = v;
-    LOG[v] = i;
-    v <<= 1;
-    if (v >= 256) v ^= 0x11d;
-  }
-  EXP[255] = EXP[0];
-  return EXP[(LOG[a] + LOG[b]) % 255];
-}
-
 function rsEncode(data: number[], ecLen: number): number[] {
   const LOG: number[] = new Array(256);
   const EXP: number[] = new Array(512);
@@ -284,8 +269,6 @@ function generateQR(data: string): number[][] {
   const bits = encode(data);
   const version = getVersion(bits.length);
   const { ecPerBlock, numBlocks, totalDataCW } = getECInfo(version);
-  const totalBits = totalDataCW * 8;
-
   bits.push(0, 0, 0, 0);
   while (bits.length % 8 !== 0) bits.push(0);
 
