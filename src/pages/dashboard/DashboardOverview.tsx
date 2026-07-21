@@ -66,8 +66,16 @@ const CRYPTO_SORT_ORDER: Record<string, number> = {
 };
 
 function formatCurrency(amount: number, currency = 'USD') {
-  const config = CURRENCY_CONFIG[currency] || CURRENCY_CONFIG.USD;
-  return new Intl.NumberFormat(config.locale, { style: 'currency', currency: config.symbol }).format(amount);
+  const config = CURRENCY_CONFIG[currency];
+
+  try {
+    return new Intl.NumberFormat(config?.locale || 'en-US', {
+      style: 'currency',
+      currency: config?.symbol || currency,
+    }).format(amount);
+  } catch {
+    return `${currency} ${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  }
 }
 
 function toSentenceCase(value: string) {
@@ -135,6 +143,20 @@ export default function DashboardOverview() {
   const { t, language } = useLanguage();
   const [showBalances, setShowBalances] = useState(true);
   const [ibanCopied, setIbanCopied] = useState(false);
+
+  const getFiatAssetName = (currency: string, customName: string) => {
+    if (customName.trim()) return customName.trim();
+
+    if (currency === 'USD') return t('dashboardOverview.currencies.usd');
+    if (currency === 'EUR') return t('dashboardOverview.currencies.eur');
+    if (currency === 'CAD') return t('dashboardOverview.currencies.cad');
+
+    try {
+      return new Intl.DisplayNames([language], { type: 'currency' }).of(currency) || currency;
+    } catch {
+      return currency;
+    }
+  };
 
   const recentTransactions = transactions.slice(0, 8);
 
@@ -262,11 +284,7 @@ export default function DashboardOverview() {
                   ) : null}
                 </div>
                 <p className="text-sm font-medium text-slate-700 mb-1">
-                  {fb.currency === 'USD'
-                    ? t('dashboardOverview.currencies.usd')
-                    : fb.currency === 'EUR'
-                    ? t('dashboardOverview.currencies.eur')
-                    : t('dashboardOverview.currencies.cad')}
+                  {getFiatAssetName(fb.currency, fb.name)}
                 </p>
                 {showRestrictedState ? (
                   <RestrictedBalanceState status={fb.status} t={t} />

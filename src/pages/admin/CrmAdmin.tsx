@@ -620,7 +620,7 @@ function normalizeBalanceRow(row: AdminRow, sourceTable: BalanceSourceTable): Ba
     ? String(row.currency || 'Fiat')
     : String(row.symbol || 'Crypto');
   const assetName = sourceTable === 'fiat_balances'
-    ? `${assetCode} Balance`
+    ? String(row.name || getDefaultFiatAssetName(assetCode))
     : String(row.name || assetCode);
   const nextBalance = Number(row.balance ?? 0);
 
@@ -635,6 +635,14 @@ function normalizeBalanceRow(row: AdminRow, sourceTable: BalanceSourceTable): Ba
     balance: Number.isNaN(nextBalance) ? 0 : nextBalance,
     status: normalizeBalanceStatus(row.status),
   };
+}
+
+function getDefaultFiatAssetName(assetCode: string) {
+  try {
+    return new Intl.DisplayNames(['en'], { type: 'currency' }).of(assetCode) || `${assetCode} Balance`;
+  } catch {
+    return `${assetCode} Balance`;
+  }
 }
 
 function normalizeWalletRow(row: AdminRow, sourceTable: WalletSourceTable): WalletRow {
@@ -4431,6 +4439,7 @@ export default function CrmAdmin() {
           ? {
               user_id: selectedUserId,
               currency: trimmedCode,
+              name: newBalanceDraft.name.trim() || getDefaultFiatAssetName(trimmedCode),
               balance: numericBalance,
               status: balanceCreateStatus,
             }

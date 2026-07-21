@@ -7,6 +7,7 @@ export interface FiatBalance {
   id: string;
   user_id: string;
   currency: string;
+  name: string;
   balance: number;
   status: BalanceAvailabilityStatus;
   created_at: string;
@@ -35,6 +36,7 @@ export function useFiatBalances(targetUserId?: string) {
       id: String(row.id || ''),
       user_id: String(row.user_id || ''),
       currency: String(row.currency || ''),
+      name: String(row.name || ''),
       balance: Number(row.balance || 0),
       status: normalizeBalanceStatus(row.status),
       created_at: String(row.created_at || ''),

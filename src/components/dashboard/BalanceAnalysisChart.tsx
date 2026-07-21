@@ -424,7 +424,7 @@ export default function BalanceAnalysisChart({
     dataFilter === 'fiat' ? totalFiat : dataFilter === 'crypto' ? totalCrypto : totalFiat + totalCrypto;
 
   const fiatBarItems = fiatBalances.map((fb) => ({
-    label: `${CURRENCY_NAMES[fb.currency] || fb.currency} (${fb.currency})`,
+    label: `${fb.name.trim() || CURRENCY_NAMES[fb.currency] || fb.currency} (${fb.currency})`,
     shortLabel: fb.currency,
     value: fb.balance * (APPROX_USD_RATES[fb.currency] || 1),
     color: FIAT_COLORS[fb.currency] || '#64748b',
