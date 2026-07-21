@@ -161,6 +161,12 @@ type ProfileSavePayload = {
   password: string;
 };
 
+type DeleteUserResponse = {
+  error?: string;
+  hint?: string;
+  storage_cleanup_warning?: string | null;
+};
+
 type BrandingForm = BrandingUpdate;
 
 async function insertAdminRow(tableName: string, payload: Record<string, unknown>) {
@@ -1235,6 +1241,99 @@ export function ProfileEditorCard({
           >
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
             Save profile
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DeleteUserDialog({
+  profile,
+  deleting,
+  onCancel,
+  onConfirm,
+}: {
+  profile: ProfileRecord;
+  deleting: boolean;
+  onCancel: () => void;
+  onConfirm: (confirmation: string) => Promise<void>;
+}) {
+  const [confirmation, setConfirmation] = useState('');
+  const confirmationTarget = profile.email.trim() || profile.id;
+  const confirmationMatches = confirmation.trim().toLowerCase() === confirmationTarget.toLowerCase();
+
+  useEffect(() => {
+    setConfirmation('');
+  }, [profile.id]);
+
+  return (
+    <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-slate-950/55 p-4">
+      <button
+        type="button"
+        onClick={deleting ? undefined : onCancel}
+        aria-label="Close delete user confirmation"
+        className="absolute inset-0 cursor-default"
+      />
+
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="delete-user-title"
+        className="relative z-10 w-full max-w-2xl overflow-hidden rounded-[28px] border border-red-200 bg-white shadow-[0_32px_100px_-38px_rgba(127,29,29,0.65)]"
+      >
+        <div className="flex items-start gap-4 border-b border-red-100 bg-red-50/70 px-6 py-5">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-red-100 text-red-700">
+            <Trash2 className="h-5 w-5" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-red-700">Permanent action</p>
+            <h2 id="delete-user-title" className="mt-1 text-2xl font-serif font-bold text-slate-950">
+              Delete {profile.full_name || 'this user'}?
+            </h2>
+            <p className="mt-1 break-all text-sm text-slate-600">{profile.email || profile.id}</p>
+          </div>
+        </div>
+
+        <div className="space-y-5 px-6 py-6">
+          <div className="rounded-2xl border border-red-200 bg-red-50/60 px-4 py-4 text-sm text-red-900">
+            This permanently removes the Supabase Auth login, CRM profile, balances, cards, transactions,
+            transfers, exchanges, loans, taxes, KYC records and uploaded KYC documents. This cannot be undone.
+          </div>
+
+          <label className="block space-y-2">
+            <span className="text-sm font-semibold text-slate-800">
+              Type <span className="font-mono text-red-700">{confirmationTarget}</span> to confirm
+            </span>
+            <input
+              value={confirmation}
+              onChange={(event) => setConfirmation(event.target.value)}
+              disabled={deleting}
+              autoFocus
+              autoComplete="off"
+              spellCheck={false}
+              className="w-full rounded-xl border border-red-200 bg-white px-4 py-3 font-mono text-sm text-slate-900 outline-none transition-all focus:border-red-400 focus:ring-2 focus:ring-red-100 disabled:cursor-not-allowed disabled:bg-slate-50"
+            />
+          </label>
+        </div>
+
+        <div className="flex flex-col-reverse gap-3 border-t border-slate-100 bg-slate-50/70 px-6 py-5 sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={deleting}
+            className="inline-flex items-center justify-center rounded-full border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={() => void onConfirm(confirmation)}
+            disabled={deleting || !confirmationMatches}
+            className="inline-flex items-center justify-center gap-2 rounded-full bg-red-600 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:bg-red-200"
+          >
+            {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+            {deleting ? 'Deleting user...' : 'Permanently delete user'}
           </button>
         </div>
       </div>
@@ -3530,6 +3629,8 @@ export default function CrmAdmin() {
   const [loadingProfiles, setLoadingProfiles] = useState(true);
   const [loadingTables, setLoadingTables] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
+  const [deleteUserDialogOpen, setDeleteUserDialogOpen] = useState(false);
+  const [deletingUser, setDeletingUser] = useState(false);
   const [savingNewRecord, setSavingNewRecord] = useState(false);
   const [savingRecordId, setSavingRecordId] = useState<string | null>(null);
   const [deletingRecordId, setDeletingRecordId] = useState<string | null>(null);
@@ -4756,6 +4857,108 @@ export default function CrmAdmin() {
     setSavingProfile(false);
   }
 
+  async function handleDeleteUser(confirmation: string) {
+    if (!selectedProfile) return;
+
+    if (!isViewerAdmin) {
+      setNotice({ kind: 'error', message: 'Only CRM administrators can permanently delete users.' });
+      return;
+    }
+
+    if (selectedProfile.id === user?.id) {
+      setNotice({ kind: 'error', message: 'You cannot delete your own administrator account.' });
+      setDeleteUserDialogOpen(false);
+      return;
+    }
+
+    setDeletingUser(true);
+    setNotice(null);
+
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      let currentSession = sessionData.session;
+      const tokenExpiresSoon =
+        !currentSession?.expires_at ||
+        currentSession.expires_at * 1000 <= Date.now() + 60_000;
+
+      if (!currentSession || tokenExpiresSoon) {
+        const { data: refreshedData, error: refreshError } = await supabase.auth.refreshSession();
+        if (refreshError) throw refreshError;
+        currentSession = refreshedData.session;
+      }
+
+      if (!currentSession?.access_token) {
+        throw new Error('Your CRM session is missing. Please sign in again and retry.');
+      }
+
+      const requestBody = {
+        action: 'delete',
+        user_id: selectedProfile.id,
+        confirm_email: confirmation.trim(),
+      };
+      const runDeleteRequest = (accessToken: string) =>
+        fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-user-management`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+            Authorization: `Bearer ${accessToken}`,
+          },
+          body: JSON.stringify(requestBody),
+        });
+
+      let response = await runDeleteRequest(currentSession.access_token);
+
+      if (response.status === 401) {
+        const { data: retriedSession, error: retryError } = await supabase.auth.refreshSession();
+        if (retryError || !retriedSession.session?.access_token) {
+          throw new Error(retryError?.message || 'Your administrator session expired. Please sign in again.');
+        }
+        response = await runDeleteRequest(retriedSession.session.access_token);
+      }
+
+      const responseText = await response.text();
+      let responseBody: DeleteUserResponse | null = null;
+
+      if (responseText) {
+        try {
+          responseBody = JSON.parse(responseText) as DeleteUserResponse;
+        } catch {
+          responseBody = null;
+        }
+      }
+
+      if (!response.ok) {
+        const details = [responseBody?.error, responseBody?.hint].filter(Boolean).join(' ');
+        throw new Error(details || `User deletion failed with status ${response.status}.`);
+      }
+
+      const deletedLabel = selectedProfile.full_name || selectedProfile.email || selectedProfile.id;
+      const cleanupWarning = responseBody?.storage_cleanup_warning;
+
+      setProfiles((current) => current.filter((profile) => profile.id !== selectedProfile.id));
+      setSelectedUserId('');
+      setTableData({});
+      setTableErrors({});
+      setEditingRecordId(null);
+      setIsAddingRecord(false);
+      setDeleteUserDialogOpen(false);
+      setNotice({
+        kind: 'success',
+        message: cleanupWarning
+          ? `${deletedLabel} was deleted. KYC storage cleanup warning: ${cleanupWarning}`
+          : `${deletedLabel} and all corresponding account data were permanently deleted.`,
+      });
+    } catch (error) {
+      setNotice({
+        kind: 'error',
+        message: error instanceof Error ? error.message : 'Could not permanently delete the selected user.',
+      });
+    } finally {
+      setDeletingUser(false);
+    }
+  }
+
   async function handleRecordSave(tableName: string, originalRow: AdminRow, editedRow: AdminRow) {
     setSavingRecordId(originalRow.id);
     setNotice(null);
@@ -5580,6 +5783,15 @@ export default function CrmAdmin() {
         </div>
       )}
 
+      {deleteUserDialogOpen && selectedProfile && (
+        <DeleteUserDialog
+          profile={selectedProfile}
+          deleting={deletingUser}
+          onCancel={() => setDeleteUserDialogOpen(false)}
+          onConfirm={handleDeleteUser}
+        />
+      )}
+
       {selectedProfile ? (
         <section className="space-y-6">
           <div className="flex flex-col gap-4 rounded-[28px] border border-[#006446]/14 bg-white px-5 py-5 shadow-[0_24px_60px_-48px_rgba(0,100,70,0.45)] lg:flex-row lg:items-center lg:justify-between">
@@ -5590,6 +5802,18 @@ export default function CrmAdmin() {
             </div>
 
             <div className="flex flex-col gap-3 sm:flex-row">
+              {isViewerAdmin && selectedProfile.id !== user?.id && (
+                <button
+                  type="button"
+                  onClick={() => setDeleteUserDialogOpen(true)}
+                  disabled={deletingUser}
+                  className="inline-flex items-center justify-center gap-2 rounded-full border border-red-200 bg-white px-4 py-2 text-sm font-semibold text-red-600 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Delete user
+                </button>
+              )}
+
               <button
                 type="button"
                 onClick={() => setSelectedUserId('')}
