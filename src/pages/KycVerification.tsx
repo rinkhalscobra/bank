@@ -29,7 +29,7 @@ const ID_TYPES = [
 
 const COUNTRIES = [
   'United States', 'United Kingdom', 'Canada', 'Australia', 'Germany',
-  'France', 'Japan', 'Brazil', 'India', 'Mexico', 'Nigeria',
+  'France', 'Switzerland', 'Italy', 'Japan', 'Brazil', 'India', 'Mexico', 'Nigeria',
   'South Africa', 'United Arab Emirates', 'Singapore', 'Other',
 ];
 
