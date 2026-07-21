@@ -36,7 +36,7 @@ export default function ExternalTransferPanel({
   const [amount, setAmount] = useState('');
   const [recipientName, setRecipientName] = useState('');
   const [bankName, setBankName] = useState('');
-  const [routingNumber, setRoutingNumber] = useState('');
+  const [iban, setIban] = useState('');
   const [accountNumber, setAccountNumber] = useState('');
   const [swiftCode, setSwiftCode] = useState('');
   const [description, setDescription] = useState('');
@@ -64,8 +64,8 @@ export default function ExternalTransferPanel({
       setError(t('externalTransfer.errors.bankRequired'));
       return;
     }
-    if (!routingNumber.trim()) {
-      setError(t('externalTransfer.errors.routingRequired'));
+    if (!iban.trim()) {
+      setError(t('externalTransfer.errors.ibanRequired'));
       return;
     }
     if (!accountNumber.trim()) {
@@ -78,7 +78,7 @@ export default function ExternalTransferPanel({
       currency,
       recipient_name: recipientName.trim(),
       bank_name: bankName.trim(),
-      routing_number: routingNumber.trim(),
+      iban: iban.replace(/\s/g, '').toUpperCase(),
       account_number: accountNumber.trim(),
       swift_code: swiftCode.trim(),
       description: description.trim(),
@@ -91,7 +91,7 @@ export default function ExternalTransferPanel({
       setAmount('');
       setRecipientName('');
       setBankName('');
-      setRoutingNumber('');
+      setIban('');
       setAccountNumber('');
       setSwiftCode('');
       setDescription('');
@@ -216,14 +216,16 @@ export default function ExternalTransferPanel({
             <div className="grid sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1.5">
-                  {t('externalTransfer.fields.routingNumber')}
+                  {t('externalTransfer.fields.iban')}
                 </label>
                 <input
                   type="text"
-                  value={routingNumber}
-                  onChange={(e) => setRoutingNumber(e.target.value)}
-                  placeholder={t('externalTransfer.placeholders.routingNumber')}
-                  maxLength={9}
+                  value={iban}
+                  onChange={(e) => setIban(e.target.value.toUpperCase())}
+                  placeholder={t('externalTransfer.placeholders.iban')}
+                  maxLength={42}
+                  autoCapitalize="characters"
+                  spellCheck={false}
                   className="w-full rounded-xl border border-[#006446]/14 px-4 py-3 font-mono text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[#006446]/20"
                 />
               </div>
@@ -279,7 +281,7 @@ export default function ExternalTransferPanel({
 
         <button
           type="submit"
-          disabled={submitting || !amount || !recipientName || !bankName || !routingNumber || !accountNumber || actionableBalances.length === 0}
+          disabled={submitting || !amount || !recipientName || !bankName || !iban || !accountNumber || actionableBalances.length === 0}
           className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#006446] py-3.5 font-semibold text-white transition-colors hover:bg-[#00523a] disabled:cursor-not-allowed disabled:bg-slate-300"
         >
           {submitting ? (

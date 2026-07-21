@@ -16,7 +16,7 @@ export interface BillPayment {
   crypto_wallet_address: string;
   bank_name: string;
   bank_account_number: string;
-  bank_routing_number: string;
+  bank_iban: string;
   bank_swift_code: string;
   created_at: string;
 }
@@ -48,7 +48,7 @@ export function useBillPayments() {
     cryptoWalletAddress?: string;
     bankName?: string;
     bankAccountNumber?: string;
-    bankRoutingNumber?: string;
+    bankIban?: string;
     bankSwiftCode?: string;
   }) => {
     if (!user) return { error: 'Not authenticated' };
@@ -64,7 +64,7 @@ export function useBillPayments() {
       crypto_wallet_address: params.cryptoWalletAddress || '',
       bank_name: params.bankName || '',
       bank_account_number: params.bankAccountNumber || '',
-      bank_routing_number: params.bankRoutingNumber || '',
+      bank_iban: params.bankIban || '',
       bank_swift_code: params.bankSwiftCode || '',
     });
     if (!error) await fetchPayments();

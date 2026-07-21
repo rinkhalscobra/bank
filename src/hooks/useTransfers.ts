@@ -14,7 +14,7 @@ export interface BankTransfer {
   target_currency: string | null;
   recipient_name: string;
   bank_name: string;
-  routing_number: string;
+  iban: string;
   account_number: string;
   swift_code: string;
   created_at: string;
@@ -32,7 +32,7 @@ export interface ExternalTransferPayload {
   currency: string;
   recipient_name: string;
   bank_name: string;
-  routing_number: string;
+  iban: string;
   account_number: string;
   swift_code: string;
   description: string;
@@ -139,7 +139,7 @@ export function useTransfers() {
         currency: payload.currency,
         recipient_name: payload.recipient_name,
         bank_name: payload.bank_name,
-        routing_number: payload.routing_number,
+        iban: payload.iban,
         account_number: payload.account_number,
         swift_code: payload.swift_code,
         description: payload.description || `Transfer to ${payload.recipient_name}`,

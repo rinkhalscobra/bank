@@ -37,7 +37,7 @@ export default function DashboardBillPay() {
 
   const [bankName, setBankName] = useState('');
   const [bankAccountNumber, setBankAccountNumber] = useState('');
-  const [bankRoutingNumber, setBankRoutingNumber] = useState('');
+  const [bankIban, setBankIban] = useState('');
   const [bankSwiftCode, setBankSwiftCode] = useState('');
 
   const formatDate = (dateStr: string) => {
@@ -65,7 +65,7 @@ export default function DashboardBillPay() {
     setSelectedWallet(null);
     setBankName('');
     setBankAccountNumber('');
-    setBankRoutingNumber('');
+    setBankIban('');
     setBankSwiftCode('');
     setPaymentMethod('crypto');
   };
@@ -78,7 +78,7 @@ export default function DashboardBillPay() {
     isAmountValid &&
     !submitting &&
     (paymentMethod === 'bank'
-      ? bankName.trim().length > 0 && bankAccountNumber.trim().length > 0
+      ? bankName.trim().length > 0 && bankAccountNumber.trim().length > 0 && bankIban.trim().length > 0
       : selectedWallet !== null);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -97,7 +97,7 @@ export default function DashboardBillPay() {
       cryptoWalletAddress: paymentMethod === 'crypto' ? selectedWallet?.wallet_address : undefined,
       bankName: paymentMethod === 'bank' ? bankName : undefined,
       bankAccountNumber: paymentMethod === 'bank' ? bankAccountNumber : undefined,
-      bankRoutingNumber: paymentMethod === 'bank' ? bankRoutingNumber : undefined,
+      bankIban: paymentMethod === 'bank' ? bankIban.replace(/\s/g, '').toUpperCase() : undefined,
       bankSwiftCode: paymentMethod === 'bank' ? bankSwiftCode : undefined,
     });
 
@@ -293,11 +293,11 @@ export default function DashboardBillPay() {
                 <BankPaymentPanel
                   bankName={bankName}
                   bankAccountNumber={bankAccountNumber}
-                  bankRoutingNumber={bankRoutingNumber}
+                  bankIban={bankIban}
                   bankSwiftCode={bankSwiftCode}
                   onChangeBankName={setBankName}
                   onChangeBankAccountNumber={setBankAccountNumber}
-                  onChangeBankRoutingNumber={setBankRoutingNumber}
+                  onChangeBankIban={setBankIban}
                   onChangeBankSwiftCode={setBankSwiftCode}
                 />
               )}

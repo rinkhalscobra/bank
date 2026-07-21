@@ -112,7 +112,7 @@ function buildBankTransferInvoice(transfer: BankTransfer, formatDate: (dateStr: 
       { label: 'Target Currency', value: isInternal ? transfer.target_currency : undefined },
       { label: 'Recipient Name', value: isInternal ? undefined : transfer.recipient_name },
       { label: 'Beneficiary Bank', value: isInternal ? undefined : transfer.bank_name },
-      { label: 'Routing Number', value: isInternal ? undefined : transfer.routing_number },
+      { label: 'IBAN', value: isInternal ? undefined : transfer.iban },
       { label: 'Account Number', value: isInternal ? undefined : transfer.account_number },
       { label: 'SWIFT Code', value: isInternal ? undefined : transfer.swift_code },
       { label: 'Description', value: transfer.description },
@@ -923,7 +923,7 @@ function BankTransferDetailModal({
           <>
             <DetailRow label="Recipient" value={transfer.recipient_name} />
             <DetailRow label="Bank" value={transfer.bank_name} />
-            <DetailRow label="Routing number" value={transfer.routing_number} mono />
+            <DetailRow label="IBAN" value={transfer.iban} mono />
             <DetailRow label="Account number" value={transfer.account_number} mono />
             <DetailRow label="SWIFT code" value={transfer.swift_code} mono />
           </>

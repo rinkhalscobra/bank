@@ -313,7 +313,10 @@ const kycOptions = [
 const FIAT_BALANCE_FORMATTING_CODES = new Set(['USD', 'EUR', 'CAD']);
 
 function toSentenceCase(value: string) {
-  return value.replace(/_/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase());
+  return value
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (char) => char.toUpperCase())
+    .replace(/\bIban\b/g, 'IBAN');
 }
 
 function formatDayMonthYear(value: unknown) {
@@ -921,7 +924,7 @@ function normalizeTransferSavePayload(sourceTable: TransferSourceTable, row: Adm
     if (transferType === 'internal') {
       payload.recipient_name = '';
       payload.bank_name = '';
-      payload.routing_number = '';
+      payload.iban = '';
       payload.account_number = '';
       payload.swift_code = '';
     }
@@ -1901,7 +1904,7 @@ function shouldShowEditableRowField(row: AdminRow, key: string) {
   const transferType = String(row.transfer_type || '');
 
   if (sourceTable === 'bank_transfers') {
-    const externalFields = ['recipient_name', 'bank_name', 'routing_number', 'account_number', 'swift_code'];
+    const externalFields = ['recipient_name', 'bank_name', 'iban', 'account_number', 'swift_code'];
 
     if (transferType === 'internal' && externalFields.includes(key)) return false;
     if (transferType === 'external' && key === 'target_currency') return false;

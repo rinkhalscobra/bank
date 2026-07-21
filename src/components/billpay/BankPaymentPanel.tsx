@@ -1,22 +1,22 @@
 interface BankPaymentPanelProps {
   bankName: string;
   bankAccountNumber: string;
-  bankRoutingNumber: string;
+  bankIban: string;
   bankSwiftCode: string;
   onChangeBankName: (v: string) => void;
   onChangeBankAccountNumber: (v: string) => void;
-  onChangeBankRoutingNumber: (v: string) => void;
+  onChangeBankIban: (v: string) => void;
   onChangeBankSwiftCode: (v: string) => void;
 }
 
 export default function BankPaymentPanel({
   bankName,
   bankAccountNumber,
-  bankRoutingNumber,
+  bankIban,
   bankSwiftCode,
   onChangeBankName,
   onChangeBankAccountNumber,
-  onChangeBankRoutingNumber,
+  onChangeBankIban,
   onChangeBankSwiftCode,
 }: BankPaymentPanelProps) {
   const inputClassName =
@@ -48,12 +48,15 @@ export default function BankPaymentPanel({
       </div>
       <div className="grid sm:grid-cols-2 gap-4">
         <div>
-          <label className="mb-1.5 block text-sm font-medium text-slate-800">Routing Number</label>
+          <label className="mb-1.5 block text-sm font-medium text-slate-800">IBAN</label>
           <input
             type="text"
-            value={bankRoutingNumber}
-            onChange={(e) => onChangeBankRoutingNumber(e.target.value)}
-            placeholder=""
+            value={bankIban}
+            onChange={(e) => onChangeBankIban(e.target.value.toUpperCase())}
+            placeholder="e.g., CH93 0076 2011 6238 5295 7"
+            maxLength={42}
+            autoCapitalize="characters"
+            spellCheck={false}
             className={inputClassName}
           />
         </div>
