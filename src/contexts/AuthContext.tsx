@@ -92,44 +92,86 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [user, fetchProfileState]);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        fetchProfileState(session.user.id).then(() => setLoading(false));
+    let active = true;
+    let authEventVersion = 0;
+
+    const clearAuthState = () => {
+      if (!active) return;
+
+      setSession(null);
+      setUser(null);
+      setProfile(null);
+      setKycStatus(null);
+      setIsAdmin(false);
+      setIsCrmStaff(false);
+      setCrmRole('customer');
+      setLoading(false);
+    };
+
+    const applySession = (nextSession: Session) => {
+      if (!active) return;
+
+      setSession(nextSession);
+      setUser(nextSession.user);
+
+      const existingUser = userRef.current;
+      const existingProfile = profileRef.current;
+      const shouldBlockForProfile =
+        !existingUser || existingUser.id !== nextSession.user.id || !existingProfile;
+
+      if (shouldBlockForProfile) {
+        setLoading(true);
+      }
+
+      void fetchProfileState(nextSession.user.id).finally(() => {
+        if (active) setLoading(false);
+      });
+    };
+
+    const initialAuthVersion = authEventVersion;
+    void supabase.auth.getSession().then(({ data: { session: initialSession } }) => {
+      if (!active || initialAuthVersion !== authEventVersion) return;
+
+      if (initialSession) {
+        applySession(initialSession);
       } else {
-        setLoading(false);
+        clearAuthState();
       }
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        const existingUser = userRef.current;
-        const existingProfile = profileRef.current;
-        const shouldBlockForProfile =
-          !existingUser || existingUser.id !== session.user.id || !existingProfile;
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, nextSession) => {
+      const eventVersion = ++authEventVersion;
 
-        if (shouldBlockForProfile) {
-          setLoading(true);
-        }
-
-        (async () => {
-          await fetchProfileState(session.user.id);
-          setLoading(false);
-        })();
-      } else {
-        setProfile(null);
-        setKycStatus(null);
-        setIsAdmin(false);
-        setIsCrmStaff(false);
-        setCrmRole('customer');
-        setLoading(false);
+      if (nextSession) {
+        applySession(nextSession);
+        return;
       }
+
+      if (event === 'SIGNED_OUT') {
+        // A remote admin operation can briefly emit a null auth event even though the
+        // current browser session is still stored and valid. Verify it before allowing
+        // route guards to send the CRM administrator back to the login page.
+        window.setTimeout(() => {
+          void supabase.auth.getSession().then(({ data: { session: persistedSession } }) => {
+            if (!active || eventVersion !== authEventVersion) return;
+
+            if (persistedSession) {
+              applySession(persistedSession);
+            } else {
+              clearAuthState();
+            }
+          });
+        }, 100);
+        return;
+      }
+
+      clearAuthState();
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      active = false;
+      subscription.unsubscribe();
+    };
   }, [fetchProfileState]);
 
   const signUp = async (email: string, password: string, fullName: string) => {

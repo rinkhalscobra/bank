@@ -4914,6 +4914,7 @@ export default function CrmAdmin() {
         if (retryError || !retriedSession.session?.access_token) {
           throw new Error(retryError?.message || 'Your administrator session expired. Please sign in again.');
         }
+        currentSession = retriedSession.session;
         response = await runDeleteRequest(retriedSession.session.access_token);
       }
 
@@ -4931,6 +4932,25 @@ export default function CrmAdmin() {
       if (!response.ok) {
         const details = [responseBody?.error, responseBody?.hint].filter(Boolean).join(' ');
         throw new Error(details || `User deletion failed with status ${response.status}.`);
+      }
+
+      const { data: sessionAfterDelete, error: sessionCheckError } = await supabase.auth.getSession();
+      if (sessionCheckError) throw sessionCheckError;
+
+      if (!sessionAfterDelete.session) {
+        const { data: restoredSession, error: restoreError } = await supabase.auth.setSession({
+          access_token: currentSession.access_token,
+          refresh_token: currentSession.refresh_token,
+        });
+
+        if (restoreError || !restoredSession.session) {
+          throw new Error(
+            restoreError?.message ||
+              'The user was deleted, but the administrator session could not be preserved. Please sign in again.'
+          );
+        }
+      } else if (sessionAfterDelete.session.user.id !== currentSession.user.id) {
+        throw new Error('The administrator session changed unexpectedly. Reload the CRM before continuing.');
       }
 
       const deletedLabel = selectedProfile.full_name || selectedProfile.email || selectedProfile.id;
