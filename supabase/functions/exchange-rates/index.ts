@@ -7,7 +7,7 @@ const corsHeaders = {
     "Content-Type, Authorization, X-Client-Info, Apikey",
 };
 
-const FIAT_CURRENCIES = ["USD", "EUR", "CAD"];
+const FIAT_CURRENCIES = ["USD", "EUR", "CAD", "CHF"];
 const CRYPTO_IDS = ["bitcoin", "ethereum", "solana", "tether", "usd-coin"];
 const CRYPTO_MAP: Record<string, string> = {
   bitcoin: "BTC",

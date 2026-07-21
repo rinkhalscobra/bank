@@ -2,6 +2,11 @@ import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { getBalanceActionError, isBalanceAvailable } from '../lib/balanceStatus';
+import {
+  isMissingIbanColumnError,
+  normalizeIbanRow,
+  toLegacyIbanPayload,
+} from '../lib/ibanCompatibility';
 
 export interface BankTransfer {
   id: string;
@@ -52,7 +57,9 @@ export function useTransfers() {
       .select('*')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false });
-    setTransfers((data as BankTransfer[]) || []);
+    setTransfers(((data as (BankTransfer & { routing_number?: string })[]) || []).map((row) =>
+      normalizeIbanRow('bank_transfers', row)
+    ));
     setLoading(false);
   }, [user]);
 
@@ -130,21 +137,31 @@ export function useTransfers() {
       return { error: `Insufficient ${payload.currency} balance` };
     }
 
-    const { error: insertError } = await supabase
+    const insertPayload = {
+      user_id: user.id,
+      transfer_type: 'external',
+      amount: payload.amount,
+      currency: payload.currency,
+      recipient_name: payload.recipient_name,
+      bank_name: payload.bank_name,
+      iban: payload.iban,
+      account_number: payload.account_number,
+      swift_code: payload.swift_code,
+      description: payload.description || `Transfer to ${payload.recipient_name}`,
+      status: 'pending',
+    };
+
+    let insertResult = await supabase
       .from('bank_transfers')
-      .insert({
-        user_id: user.id,
-        transfer_type: 'external',
-        amount: payload.amount,
-        currency: payload.currency,
-        recipient_name: payload.recipient_name,
-        bank_name: payload.bank_name,
-        iban: payload.iban,
-        account_number: payload.account_number,
-        swift_code: payload.swift_code,
-        description: payload.description || `Transfer to ${payload.recipient_name}`,
-        status: 'pending',
-      });
+      .insert(insertPayload);
+
+    if (isMissingIbanColumnError(insertResult.error, 'bank_transfers')) {
+      insertResult = await supabase
+        .from('bank_transfers')
+        .insert(toLegacyIbanPayload('bank_transfers', insertPayload));
+    }
+
+    const { error: insertError } = insertResult;
 
     if (insertError) {
       setSubmitting(false);

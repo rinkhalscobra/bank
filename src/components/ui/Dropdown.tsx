@@ -53,7 +53,7 @@ export default function Dropdown({ value, options, onChange, placeholder, classN
       </button>
 
       {open && (
-        <div className="absolute z-50 mt-1.5 w-full min-w-[180px] max-h-64 overflow-auto rounded-2xl border border-[#006446]/14 bg-white py-1 shadow-[0_24px_70px_-38px_rgba(0,100,70,0.45)] animate-in">
+        <div className="absolute z-[100] mt-1.5 w-full min-w-[180px] max-h-64 overflow-auto rounded-2xl border border-[#006446]/14 bg-white py-1 shadow-[0_24px_70px_-38px_rgba(0,100,70,0.45)] animate-in">
           {options.map((opt) => {
             const isSelected = opt.value === value;
             return (

@@ -19,6 +19,17 @@ export interface CryptoPrice {
   usd_24h_change: number;
 }
 
+export type CrossAssetDirection = 'fiat_to_crypto' | 'crypto_to_fiat';
+
+export interface CrossAssetExchangeParams {
+  direction: CrossAssetDirection;
+  fromAsset: string;
+  toAsset: string;
+  fromAmount: number;
+  toAmount: number;
+  exchangeRate: number;
+}
+
 interface RatesResponse {
   rates: Record<string, Record<string, number>>;
   crypto: Record<string, CryptoPrice>;
@@ -48,8 +59,10 @@ export function useLiveRates() {
       setRates(data.rates);
       setCryptoPrices(data.crypto || {});
       setFetchedAt(data.fetched_at);
+      return data;
     } catch {
       setError('Unable to load live rates');
+      return null;
     } finally {
       setLoading(false);
     }
@@ -70,7 +83,7 @@ export function useCurrencyExchange(targetUserId?: string) {
   const [loading, setLoading] = useState(true);
   const resolvedUserId = targetUserId ?? user?.id ?? null;
 
-  const fetchExchanges = async () => {
+  const fetchExchanges = useCallback(async () => {
     if (!resolvedUserId) {
       setExchanges([]);
       setLoading(false);
@@ -86,7 +99,7 @@ export function useCurrencyExchange(targetUserId?: string) {
       .limit(50);
     setExchanges((data as CurrencyExchange[]) || []);
     setLoading(false);
-  };
+  }, [resolvedUserId]);
 
   const executeExchange = async (params: {
     fromCurrency: string;
@@ -131,9 +144,153 @@ export function useCurrencyExchange(targetUserId?: string) {
     return { error: error?.message || null };
   };
 
+  const executeCrossAssetFallback = async (params: CrossAssetExchangeParams) => {
+    if (!resolvedUserId) return { error: 'Not authenticated' };
+
+    const sourceIsFiat = params.direction === 'fiat_to_crypto';
+    const sourceTable = sourceIsFiat ? 'fiat_balances' : 'crypto_balances';
+    const targetTable = sourceIsFiat ? 'crypto_balances' : 'fiat_balances';
+    const sourceCodeColumn = sourceIsFiat ? 'currency' : 'symbol';
+    const targetCodeColumn = sourceIsFiat ? 'symbol' : 'currency';
+
+    const [sourceResult, targetResult] = await Promise.all([
+      supabase
+        .from(sourceTable)
+        .select('id, balance, status')
+        .eq('user_id', resolvedUserId)
+        .eq(sourceCodeColumn, params.fromAsset)
+        .single(),
+      supabase
+        .from(targetTable)
+        .select('id, balance, status')
+        .eq('user_id', resolvedUserId)
+        .eq(targetCodeColumn, params.toAsset)
+        .single(),
+    ]);
+
+    if (sourceResult.error) return { error: sourceResult.error.message };
+    if (targetResult.error) return { error: targetResult.error.message };
+
+    const sourceRow = sourceResult.data as { id: string; balance: number; status?: string };
+    const targetRow = targetResult.data as { id: string; balance: number; status?: string };
+    const sourceBalance = Number(sourceRow.balance);
+    const targetBalance = Number(targetRow.balance);
+
+    if ((sourceRow.status || 'available') !== 'available') {
+      return { error: `Source ${sourceIsFiat ? 'fiat' : 'crypto'} balance is ${sourceRow.status} and cannot be exchanged` };
+    }
+
+    if ((targetRow.status || 'available') !== 'available') {
+      return { error: `Destination ${sourceIsFiat ? 'crypto' : 'fiat'} balance is ${targetRow.status} and cannot receive funds` };
+    }
+
+    if (sourceBalance < params.fromAmount) {
+      return { error: `Insufficient balance. Available: ${sourceBalance}` };
+    }
+
+    const updatedSourceBalance = sourceBalance - params.fromAmount;
+    const updatedTargetBalance = targetBalance + params.toAmount;
+
+    const sourceUpdate = await supabase
+      .from(sourceTable)
+      .update({ balance: updatedSourceBalance })
+      .eq('id', sourceRow.id)
+      .eq('user_id', resolvedUserId)
+      .eq('balance', sourceRow.balance)
+      .select('id')
+      .maybeSingle();
+
+    if (sourceUpdate.error) return { error: sourceUpdate.error.message };
+    if (!sourceUpdate.data) return { error: 'The source balance changed. Refresh rates and try again.' };
+
+    const targetUpdate = await supabase
+      .from(targetTable)
+      .update({ balance: updatedTargetBalance })
+      .eq('id', targetRow.id)
+      .eq('user_id', resolvedUserId)
+      .eq('balance', targetRow.balance)
+      .select('id')
+      .maybeSingle();
+
+    if (targetUpdate.error || !targetUpdate.data) {
+      await supabase
+        .from(sourceTable)
+        .update({ balance: sourceBalance })
+        .eq('id', sourceRow.id)
+        .eq('user_id', resolvedUserId)
+        .eq('balance', updatedSourceBalance);
+      return { error: targetUpdate.error?.message || 'The destination balance changed. Please try again.' };
+    }
+
+    const historyResult = await supabase.from('currency_exchanges').insert({
+      user_id: resolvedUserId,
+      from_currency: params.fromAsset,
+      to_currency: params.toAsset,
+      from_amount: params.fromAmount,
+      to_amount: params.toAmount,
+      exchange_rate: params.exchangeRate,
+      fee: 0,
+      status: 'completed',
+    });
+
+    if (historyResult.error) {
+      await Promise.all([
+        supabase
+          .from(sourceTable)
+          .update({ balance: sourceBalance })
+          .eq('id', sourceRow.id)
+          .eq('user_id', resolvedUserId)
+          .eq('balance', updatedSourceBalance),
+        supabase
+          .from(targetTable)
+          .update({ balance: targetBalance })
+          .eq('id', targetRow.id)
+          .eq('user_id', resolvedUserId)
+          .eq('balance', updatedTargetBalance),
+      ]);
+      return { error: historyResult.error.message };
+    }
+
+    return { error: null };
+  };
+
+  const executeCrossAssetExchange = async (params: CrossAssetExchangeParams) => {
+    if (!resolvedUserId) return { error: 'Not authenticated' };
+
+    const { error } = await supabase.rpc('execute_cross_asset_exchange', {
+      p_user_id: resolvedUserId,
+      p_direction: params.direction,
+      p_from_asset: params.fromAsset,
+      p_to_asset: params.toAsset,
+      p_from_amount: params.fromAmount,
+      p_to_amount: params.toAmount,
+      p_exchange_rate: params.exchangeRate,
+      p_fee: 0,
+    });
+
+    const missingRpc = error && (
+      error.code === 'PGRST202' ||
+      error.message.includes('execute_cross_asset_exchange') ||
+      error.message.includes('schema cache')
+    );
+
+    if (error && !missingRpc) return { error: error.message };
+
+    const result = missingRpc ? await executeCrossAssetFallback(params) : { error: null };
+    if (!result.error) await fetchExchanges();
+    return result;
+  };
+
   useEffect(() => {
     void fetchExchanges();
-  }, [resolvedUserId]);
+  }, [fetchExchanges]);
 
-  return { exchanges, loading, refetch: fetchExchanges, executeExchange, executeCryptoSwap };
+  return {
+    exchanges,
+    loading,
+    refetch: fetchExchanges,
+    executeExchange,
+    executeCryptoSwap,
+    executeCrossAssetExchange,
+  };
 }

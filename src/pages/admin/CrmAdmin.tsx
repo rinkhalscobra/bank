@@ -45,6 +45,11 @@ import {
 } from '../../lib/balanceStatus';
 import { getCrmRoleLabel, normalizeCrmRole, type CrmRole } from '../../lib/crmRoles';
 import {
+  isMissingIbanColumnError,
+  normalizeIbanRow,
+  toLegacyIbanPayload,
+} from '../../lib/ibanCompatibility';
+import {
   TAX_STATUS_OPTIONS,
   normalizeTaxStatus,
   summarizeTaxAmounts,
@@ -157,6 +162,45 @@ type ProfileSavePayload = {
 };
 
 type BrandingForm = BrandingUpdate;
+
+async function insertAdminRow(tableName: string, payload: Record<string, unknown>) {
+  let result = await supabase.from(tableName).insert(payload).select().single();
+
+  if (isMissingIbanColumnError(result.error, tableName)) {
+    result = await supabase
+      .from(tableName)
+      .insert(toLegacyIbanPayload(tableName, payload))
+      .select()
+      .single();
+  }
+
+  return {
+    ...result,
+    data: result.data ? normalizeIbanRow(tableName, result.data as AdminRow) : result.data,
+  };
+}
+
+async function updateAdminRow(
+  tableName: string,
+  rowId: string,
+  payload: Record<string, unknown>,
+) {
+  let result = await supabase.from(tableName).update(payload).eq('id', rowId).select().single();
+
+  if (isMissingIbanColumnError(result.error, tableName)) {
+    result = await supabase
+      .from(tableName)
+      .update(toLegacyIbanPayload(tableName, payload))
+      .eq('id', rowId)
+      .select()
+      .single();
+  }
+
+  return {
+    ...result,
+    data: result.data ? normalizeIbanRow(tableName, result.data as AdminRow) : result.data,
+  };
+}
 
 type TableConfig = {
   name: string;
@@ -608,8 +652,9 @@ function normalizeTransactionRow(row: AdminRow, sourceTable: TransactionSourceTa
 }
 
 function normalizeTransferRow(row: AdminRow, sourceTable: TransferSourceTable): TransferRow {
+  const normalizedRow = normalizeIbanRow(sourceTable, row);
   return {
-    ...row,
+    ...normalizedRow,
     id: `${sourceTable}:${String(row.id)}`,
     __source_table: sourceTable,
     __source_id: String(row.id),
@@ -950,6 +995,7 @@ function normalizeTransferSavePayload(sourceTable: TransferSourceTable, row: Adm
       payload.recipient_name = '';
       payload.bank_name = '';
       payload.iban = '';
+      delete payload.routing_number;
       payload.account_number = '';
       payload.swift_code = '';
     }
@@ -3919,7 +3965,8 @@ export default function CrmAdmin() {
       error = fallbackResult.error;
     }
 
-    return { rows: (data as AdminRow[]) || [], error: error?.message || null };
+    const rows = ((data as AdminRow[]) || []).map((row) => normalizeIbanRow(table.name, row));
+    return { rows, error: error?.message || null };
   }
 
   async function loadAllTableData(userId: string) {
@@ -4264,11 +4311,7 @@ export default function CrmAdmin() {
       delete payload.created_at;
       delete payload.updated_at;
 
-      const { data, error } = await supabase
-        .from(sourceConfig.name)
-        .insert(payload)
-        .select()
-        .single();
+      const { data, error } = await insertAdminRow(sourceConfig.name, payload);
 
       if (error) {
         setNotice({ kind: 'error', message: error.message });
@@ -4324,11 +4367,7 @@ export default function CrmAdmin() {
       delete payload.created_at;
       delete payload.updated_at;
 
-      const { data, error } = await supabase
-        .from(sourceConfig.name)
-        .insert(payload)
-        .select()
-        .single();
+      const { data, error } = await insertAdminRow(sourceConfig.name, payload);
 
       if (error) {
         setNotice({ kind: 'error', message: error.message });
@@ -4383,11 +4422,7 @@ export default function CrmAdmin() {
       delete payload.created_at;
       delete payload.updated_at;
 
-      const { data, error } = await supabase
-        .from(sourceConfig.name)
-        .insert(payload)
-        .select()
-        .single();
+      const { data, error } = await insertAdminRow(sourceConfig.name, payload);
 
       if (error) {
         setNotice({ kind: 'error', message: error.message });
@@ -4442,11 +4477,7 @@ export default function CrmAdmin() {
       delete payload.created_at;
       delete payload.updated_at;
 
-      const { data, error } = await supabase
-        .from(sourceConfig.name)
-        .insert(payload)
-        .select()
-        .single();
+      const { data, error } = await insertAdminRow(sourceConfig.name, payload);
 
       if (error) {
         setNotice({ kind: 'error', message: error.message });
@@ -4580,11 +4611,7 @@ export default function CrmAdmin() {
     delete payload.created_at;
     delete payload.updated_at;
 
-    const { data, error } = await supabase
-      .from(activeConfig.name)
-      .insert(payload)
-      .select()
-      .single();
+    const { data, error } = await insertAdminRow(activeConfig.name, payload);
 
     if (error) {
       setNotice({ kind: 'error', message: error.message });
@@ -4745,12 +4772,7 @@ export default function CrmAdmin() {
       payload.updated_at = new Date().toISOString();
     }
 
-    const { data, error } = await supabase
-      .from(tableName)
-      .update(payload)
-      .eq('id', originalRow.id)
-      .select()
-      .single();
+    const { data, error } = await updateAdminRow(tableName, originalRow.id, payload);
 
     if (error) {
       setNotice({ kind: 'error', message: error.message });

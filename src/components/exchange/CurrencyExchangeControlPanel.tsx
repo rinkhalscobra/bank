@@ -10,7 +10,11 @@ import {
   TrendingUp,
 } from 'lucide-react';
 import Dropdown from '../ui/Dropdown';
-import { useCurrencyExchange, useLiveRates } from '../../hooks/useCurrencyExchange';
+import {
+  useCurrencyExchange,
+  useLiveRates,
+  type CrossAssetDirection,
+} from '../../hooks/useCurrencyExchange';
 import { useFiatBalances } from '../../hooks/useFiatBalances';
 import { useCryptoBalances } from '../../hooks/useCryptoBalances';
 import { useLanguage } from '../../contexts/LanguageContext';
@@ -31,6 +35,7 @@ const CURRENCY_INFO: Record<string, { symbol: string; nameKey: string }> = {
   USD: { symbol: '$', nameKey: 'dashboardCurrencyExchange.currencies.usd' },
   EUR: { symbol: 'EUR', nameKey: 'dashboardCurrencyExchange.currencies.eur' },
   CAD: { symbol: 'CAD', nameKey: 'dashboardCurrencyExchange.currencies.cad' },
+  CHF: { symbol: 'CHF', nameKey: 'dashboardCurrencyExchange.currencies.chf' },
 };
 
 const CRYPTO_NAMES: Record<string, string> = {
@@ -41,7 +46,29 @@ const CRYPTO_NAMES: Record<string, string> = {
   USDC: 'USD Coin',
 };
 
-const SUPPORTED_CURRENCIES = ['USD', 'EUR', 'CAD'];
+const SUPPORTED_CURRENCIES = ['USD', 'EUR', 'CAD', 'CHF'];
+
+function getCrossAssetRate(
+  direction: CrossAssetDirection,
+  fiatAsset: string,
+  cryptoAsset: string,
+  rates: Record<string, Record<string, number>>,
+  cryptoPrices: Record<string, { usd: number }>,
+) {
+  const fiatToUsdRate = fiatAsset === 'USD'
+    ? 1
+    : rates[fiatAsset]?.USD || (rates.USD?.[fiatAsset] ? 1 / rates.USD[fiatAsset] : 0);
+  const usdToFiatRate = fiatAsset === 'USD'
+    ? 1
+    : rates.USD?.[fiatAsset] || (rates[fiatAsset]?.USD ? 1 / rates[fiatAsset].USD : 0);
+  const cryptoUsdPrice = cryptoPrices[cryptoAsset]?.usd || 0;
+
+  if (direction === 'fiat_to_crypto') {
+    return fiatToUsdRate > 0 && cryptoUsdPrice > 0 ? fiatToUsdRate / cryptoUsdPrice : 0;
+  }
+
+  return cryptoUsdPrice > 0 && usdToFiatRate > 0 ? cryptoUsdPrice * usdToFiatRate : 0;
+}
 
 function formatFiat(amount: number, currency: string = 'USD') {
   return new Intl.NumberFormat('en-US', {
@@ -72,7 +99,7 @@ export default function CurrencyExchangeControlPanel({
   onSuccess,
 }: CurrencyExchangeControlPanelProps) {
   const { t } = useLanguage();
-  const { loading, executeExchange, executeCryptoSwap } = useCurrencyExchange(userId);
+  const { loading, executeExchange, executeCryptoSwap, executeCrossAssetExchange } = useCurrencyExchange(userId);
   const { rates, cryptoPrices, fetchedAt, loading: ratesLoading, error: ratesError, refetchRates } = useLiveRates();
   const { fiatBalances, loading: fiatLoading, refetch: refetchFiat } = useFiatBalances(userId);
   const { cryptoBalances, loading: cryptoLoading, refetch: refetchCrypto } = useCryptoBalances(userId);
@@ -95,6 +122,13 @@ export default function CurrencyExchangeControlPanel({
   const [cryptoSubmitting, setCryptoSubmitting] = useState(false);
   const [cryptoResult, setCryptoResult] = useState<{ success: boolean; message: string } | null>(null);
 
+  const [crossDirection, setCrossDirection] = useState<CrossAssetDirection>('fiat_to_crypto');
+  const [crossFromAsset, setCrossFromAsset] = useState('');
+  const [crossToAsset, setCrossToAsset] = useState('');
+  const [crossAmount, setCrossAmount] = useState('');
+  const [crossSubmitting, setCrossSubmitting] = useState(false);
+  const [crossResult, setCrossResult] = useState<{ success: boolean; message: string } | null>(null);
+
   useEffect(() => {
     setFromCurrency('');
     setToCurrency('');
@@ -104,6 +138,11 @@ export default function CurrencyExchangeControlPanel({
     setToCrypto('');
     setCryptoAmount('');
     setCryptoResult(null);
+    setCrossDirection('fiat_to_crypto');
+    setCrossFromAsset('');
+    setCrossToAsset('');
+    setCrossAmount('');
+    setCrossResult(null);
   }, [userId]);
 
   const cryptoSymbols = Object.keys(cryptoPrices);
@@ -149,6 +188,30 @@ export default function CurrencyExchangeControlPanel({
   const cryptoFromBal = availableCryptoBalances.find((balance) => balance.symbol === fromCrypto);
   const cryptoInsufficient = cryptoFromBal ? cryptoNum > cryptoFromBal.balance : false;
 
+  const crossSourceIsFiat = crossDirection === 'fiat_to_crypto';
+  const crossNum = parseFloat(crossAmount) || 0;
+  const crossFromBalance = crossSourceIsFiat
+    ? availableFiatBalances.find((balance) => balance.currency === crossFromAsset)
+    : availableCryptoBalances.find((balance) => balance.symbol === crossFromAsset);
+  const crossInsufficient = crossFromBalance ? crossNum > crossFromBalance.balance : false;
+  const crossFiatAsset = crossSourceIsFiat ? crossFromAsset : crossToAsset;
+  const crossCryptoAsset = crossSourceIsFiat ? crossToAsset : crossFromAsset;
+  const fiatToUsdRate = crossFiatAsset === 'USD'
+    ? 1
+    : rates[crossFiatAsset]?.USD || (rates.USD?.[crossFiatAsset] ? 1 / rates.USD[crossFiatAsset] : 0);
+  const crossCryptoUsdPrice = cryptoPrices[crossCryptoAsset]?.usd || 0;
+  const crossRate = getCrossAssetRate(
+    crossDirection,
+    crossFiatAsset,
+    crossCryptoAsset,
+    rates,
+    cryptoPrices,
+  );
+  const crossConvertedAmount = crossNum * crossRate;
+  const crossValueUsd = crossSourceIsFiat
+    ? crossNum * fiatToUsdRate
+    : crossNum * crossCryptoUsdPrice;
+
   function timeAgo(isoStr: string) {
     const diff = Date.now() - new Date(isoStr).getTime();
     const secs = Math.floor(diff / 1000);
@@ -157,10 +220,11 @@ export default function CurrencyExchangeControlPanel({
     return `${mins}${t('dashboardCurrencyExchange.time.minutesAgo')}`;
   }
 
-  async function handleAfterSuccess(kind: 'fiat' | 'crypto') {
-    if (kind === 'fiat') {
+  async function handleAfterSuccess(kind: 'fiat' | 'crypto' | 'both') {
+    if (kind === 'fiat' || kind === 'both') {
       await refetchFiat();
-    } else {
+    }
+    if (kind === 'crypto' || kind === 'both') {
       await refetchCrypto();
     }
 
@@ -244,6 +308,72 @@ export default function CurrencyExchangeControlPanel({
     setCryptoSubmitting(false);
   };
 
+  const handleCrossAssetExchange = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (
+      !crossFromAsset ||
+      !crossToAsset ||
+      crossNum <= 0 ||
+      crossRate <= 0 ||
+      crossInsufficient
+    ) return;
+
+    setCrossSubmitting(true);
+    setCrossResult(null);
+
+    const latestMarket = await refetchRates();
+    if (!latestMarket) {
+      setCrossResult({ success: false, message: 'Unable to load a current market quote. Please try again.' });
+      setCrossSubmitting(false);
+      return;
+    }
+
+    const liveRate = getCrossAssetRate(
+      crossDirection,
+      crossFiatAsset,
+      crossCryptoAsset,
+      latestMarket.rates,
+      latestMarket.crypto || {},
+    );
+    if (liveRate <= 0) {
+      setCrossResult({ success: false, message: 'A live rate is not available for this pair.' });
+      setCrossSubmitting(false);
+      return;
+    }
+
+    const liveConvertedAmount = crossNum * liveRate;
+    const received = crossSourceIsFiat
+      ? parseFloat(liveConvertedAmount.toFixed(8))
+      : Math.round(liveConvertedAmount * 100) / 100;
+    const result = await executeCrossAssetExchange({
+      direction: crossDirection,
+      fromAsset: crossFromAsset,
+      toAsset: crossToAsset,
+      fromAmount: crossNum,
+      toAmount: received,
+      exchangeRate: liveRate,
+    });
+
+    if (result.error) {
+      setCrossResult({ success: false, message: result.error });
+    } else {
+      const sentLabel = crossSourceIsFiat
+        ? formatFiat(crossNum, crossFromAsset)
+        : `${formatCryptoAmount(crossNum)} ${crossFromAsset}`;
+      const receivedLabel = crossSourceIsFiat
+        ? `${formatCryptoAmount(received)} ${crossToAsset}`
+        : formatFiat(received, crossToAsset);
+      setCrossResult({
+        success: true,
+        message: `${t('dashboardCurrencyExchange.messages.exchanged')} ${sentLabel} ${t('dashboardCurrencyExchange.messages.to')} ${receivedLabel}`,
+      });
+      setCrossAmount('');
+      await handleAfterSuccess('both');
+    }
+
+    setCrossSubmitting(false);
+  };
+
   if (isCrmVariant && !userId) {
     return (
       <div className="border border-[#006446]/14 bg-white px-6 py-12 text-center shadow-[0_24px_60px_-48px_rgba(0,100,70,0.45)]">
@@ -302,8 +432,8 @@ export default function CurrencyExchangeControlPanel({
       )}
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <div className="overflow-hidden rounded-2xl border border-[#006446]/14 bg-white shadow-[0_24px_60px_-48px_rgba(0,100,70,0.45)]">
-          <div className="border-b border-[#006446]/10 bg-gradient-to-r from-[#006446]/[0.04] to-white px-6 py-4">
+        <div className="overflow-visible rounded-2xl border border-[#006446]/14 bg-white shadow-[0_24px_60px_-48px_rgba(0,100,70,0.45)]">
+          <div className="rounded-t-2xl border-b border-[#006446]/10 bg-gradient-to-r from-[#006446]/[0.04] to-white px-6 py-4">
             <div className="flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#006446]/10">
                 <DollarSign className="h-5 w-5 text-[#006446]" />
@@ -447,8 +577,8 @@ export default function CurrencyExchangeControlPanel({
           </div>
         </div>
 
-        <div className="overflow-hidden rounded-2xl border border-[#006446]/14 bg-white shadow-[0_24px_60px_-48px_rgba(0,100,70,0.45)]">
-          <div className="border-b border-[#006446]/10 bg-gradient-to-r from-[#006446]/[0.04] to-white px-6 py-4">
+        <div className="overflow-visible rounded-2xl border border-[#006446]/14 bg-white shadow-[0_24px_60px_-48px_rgba(0,100,70,0.45)]">
+          <div className="rounded-t-2xl border-b border-[#006446]/10 bg-gradient-to-r from-[#006446]/[0.04] to-white px-6 py-4">
             <div className="flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#006446]/10">
                 <Bitcoin className="h-5 w-5 text-[#006446]" />
@@ -630,6 +760,190 @@ export default function CurrencyExchangeControlPanel({
             )}
           </div>
         </div>
+      </div>
+
+      <div className="overflow-visible rounded-2xl border border-[#006446]/14 bg-white shadow-[0_24px_60px_-48px_rgba(0,100,70,0.45)]">
+        <div className="rounded-t-2xl border-b border-[#006446]/10 bg-gradient-to-r from-[#006446]/[0.08] via-[#006446]/[0.03] to-white px-6 py-4">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#006446]/10">
+              <ArrowRightLeft className="h-5 w-5 text-[#006446]" />
+            </div>
+            <div>
+              <h2 className="font-semibold text-slate-900">
+                {t('dashboardCurrencyExchange.cross.title')}
+              </h2>
+              <p className="text-[11px] text-[#006446]/70">
+                {t('dashboardCurrencyExchange.cross.liveRatesSource')}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {crossResult && (
+          <div className="flex items-center gap-2 border-b border-[#006446]/10 bg-[#006446]/[0.04] px-4 py-2.5 text-sm text-[#006446]">
+            {crossResult.success ? <CheckCircle className="h-4 w-4 shrink-0" /> : <AlertCircle className="h-4 w-4 shrink-0" />}
+            <span>{crossResult.message}</span>
+          </div>
+        )}
+
+        <form onSubmit={handleCrossAssetExchange} className="space-y-5 p-6">
+          <div>
+            <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-[#006446]/70">
+              {t('dashboardCurrencyExchange.cross.direction')}
+            </label>
+            <Dropdown
+              value={crossDirection}
+              onChange={(value) => {
+                setCrossDirection(value as CrossAssetDirection);
+                setCrossFromAsset('');
+                setCrossToAsset('');
+                setCrossAmount('');
+                setCrossResult(null);
+              }}
+              options={[
+                { value: 'fiat_to_crypto', label: t('dashboardCurrencyExchange.cross.fiatToCrypto') },
+                { value: 'crypto_to_fiat', label: t('dashboardCurrencyExchange.cross.cryptoToFiat') },
+              ]}
+            />
+          </div>
+
+          <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(180px,0.7fr)_auto_minmax(0,1fr)] lg:items-end">
+            <div>
+              <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-[#006446]/70">
+                {t('dashboardCurrencyExchange.fields.from')}
+              </label>
+              <Dropdown
+                value={crossFromAsset}
+                onChange={(value) => {
+                  setCrossFromAsset(value);
+                  setCrossAmount('');
+                  setCrossResult(null);
+                }}
+                options={(crossSourceIsFiat ? fiatOptions : cryptoOptions).filter((option) =>
+                  crossSourceIsFiat
+                    ? availableFiatBalances.some((balance) => balance.currency === option.value)
+                    : availableCryptoBalances.some((balance) => balance.symbol === option.value)
+                )}
+                placeholder={crossSourceIsFiat
+                  ? t('dashboardCurrencyExchange.placeholders.selectCurrency')
+                  : t('dashboardCurrencyExchange.placeholders.selectToken')}
+              />
+            </div>
+
+            <div>
+              <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-[#006446]/70">
+                {t('dashboardCurrencyExchange.fields.amount')}
+              </label>
+              <input
+                type="number"
+                step="any"
+                min="0"
+                value={crossAmount}
+                onChange={(event) => setCrossAmount(event.target.value)}
+                placeholder={t('dashboardCurrencyExchange.placeholders.amount')}
+                className="w-full rounded-xl border border-[#006446]/14 bg-[#006446]/[0.03] px-3 py-2.5 text-sm text-slate-900 transition-shadow focus:outline-none focus:ring-2 focus:ring-[#006446]/20"
+                required
+              />
+              {crossFromBalance && (
+                <div className="mt-1 flex items-center justify-between gap-3">
+                  <p className={`text-[11px] ${crossInsufficient ? 'font-medium text-[#006446]' : 'text-[#006446]/70'}`}>
+                    {t('dashboardCurrencyExchange.balance')}: {crossSourceIsFiat
+                      ? formatFiat(crossFromBalance.balance, crossFromAsset)
+                      : `${formatCryptoAmount(crossFromBalance.balance)} ${crossFromAsset}`}
+                    {crossInsufficient && ` -- ${t('dashboardCurrencyExchange.insufficient')}`}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setCrossAmount(String(crossFromBalance.balance))}
+                    className="text-[11px] font-semibold text-[#006446] hover:text-[#00523a]"
+                  >
+                    {t('dashboardCurrencyExchange.actions.max')}
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                setCrossDirection(crossSourceIsFiat ? 'crypto_to_fiat' : 'fiat_to_crypto');
+                setCrossFromAsset(crossToAsset);
+                setCrossToAsset(crossFromAsset);
+                setCrossAmount('');
+                setCrossResult(null);
+              }}
+              title={t('dashboardCurrencyExchange.cross.reverse')}
+              aria-label={t('dashboardCurrencyExchange.cross.reverse')}
+              className="flex h-10 w-10 items-center justify-center rounded-full bg-[#006446]/10 transition-colors hover:bg-[#006446]/15"
+            >
+              <ArrowRightLeft className="h-4 w-4 text-[#006446]" />
+            </button>
+
+            <div>
+              <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-[#006446]/70">
+                {t('dashboardCurrencyExchange.fields.to')}
+              </label>
+              <Dropdown
+                value={crossToAsset}
+                onChange={(value) => {
+                  setCrossToAsset(value);
+                  setCrossResult(null);
+                }}
+                options={(crossSourceIsFiat ? cryptoOptions : fiatOptions).filter((option) =>
+                  crossSourceIsFiat
+                    ? availableCryptoBalances.some((balance) => balance.symbol === option.value)
+                    : availableFiatBalances.some((balance) => balance.currency === option.value)
+                )}
+                placeholder={crossSourceIsFiat
+                  ? t('dashboardCurrencyExchange.placeholders.selectToken')
+                  : t('dashboardCurrencyExchange.placeholders.selectCurrency')}
+              />
+            </div>
+          </div>
+
+          {crossFromAsset && crossToAsset && crossNum > 0 && crossRate > 0 && (
+            <div className="grid gap-2 rounded-2xl border border-[#006446]/14 bg-[#006446]/[0.04] p-4 text-sm sm:grid-cols-3">
+              <div>
+                <p className="text-[11px] text-[#006446]/70">{t('dashboardCurrencyExchange.summary.rate')}</p>
+                <p className="mt-1 font-medium text-slate-900">
+                  1 {crossFromAsset} = {crossSourceIsFiat ? formatCryptoAmount(crossRate) : crossRate.toFixed(2)} {crossToAsset}
+                </p>
+              </div>
+              <div>
+                <p className="text-[11px] text-[#006446]/70">{t('dashboardCurrencyExchange.summary.value')}</p>
+                <p className="mt-1 font-medium text-slate-900">{formatUsd(crossValueUsd)}</p>
+              </div>
+              <div>
+                <p className="text-[11px] text-[#006446]/70">{t('dashboardCurrencyExchange.summary.youReceive')}</p>
+                <p className="mt-1 font-bold text-[#006446]">
+                  {crossSourceIsFiat
+                    ? `${formatCryptoAmount(crossConvertedAmount)} ${crossToAsset}`
+                    : formatFiat(crossConvertedAmount, crossToAsset)}
+                </p>
+              </div>
+            </div>
+          )}
+
+          <button
+            type="submit"
+            disabled={
+              crossSubmitting ||
+              ratesLoading ||
+              !crossFromAsset ||
+              !crossToAsset ||
+              crossNum <= 0 ||
+              crossRate <= 0 ||
+              crossInsufficient ||
+              availableFiatBalances.length === 0 ||
+              availableCryptoBalances.length === 0
+            }
+            className="w-full rounded-xl bg-[#006446] py-3 text-sm font-semibold text-white transition-colors hover:bg-[#00523a] disabled:bg-slate-200 disabled:text-slate-400"
+          >
+            {crossSubmitting
+              ? t('dashboardCurrencyExchange.actions.processing')
+              : t('dashboardCurrencyExchange.cross.convert')}
+          </button>
+        </form>
       </div>
     </div>
   );

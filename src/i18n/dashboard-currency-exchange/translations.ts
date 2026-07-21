@@ -41,9 +41,18 @@ registerTranslations({
     'dashboardCurrencyExchange.crypto.livePricesSource': 'Live prices via CoinGecko',
     'dashboardCurrencyExchange.crypto.livePrices': 'Live Prices',
 
+    'dashboardCurrencyExchange.cross.title': 'Fiat ↔ Crypto Exchange',
+    'dashboardCurrencyExchange.cross.liveRatesSource': 'Live fiat rates and crypto prices',
+    'dashboardCurrencyExchange.cross.direction': 'Direction',
+    'dashboardCurrencyExchange.cross.fiatToCrypto': 'Fiat to Crypto',
+    'dashboardCurrencyExchange.cross.cryptoToFiat': 'Crypto to Fiat',
+    'dashboardCurrencyExchange.cross.reverse': 'Reverse exchange direction',
+    'dashboardCurrencyExchange.cross.convert': 'Convert',
+
     'dashboardCurrencyExchange.currencies.usd': 'US Dollar',
     'dashboardCurrencyExchange.currencies.eur': 'Euro',
     'dashboardCurrencyExchange.currencies.cad': 'Canadian Dollar',
+    'dashboardCurrencyExchange.currencies.chf': 'Swiss Franc',
 
     'dashboardCurrencyExchange.time.secondsAgo': 's ago',
     'dashboardCurrencyExchange.time.minutesAgo': 'm ago',
@@ -89,9 +98,18 @@ registerTranslations({
     'dashboardCurrencyExchange.crypto.livePricesSource': 'Prix en direct via CoinGecko',
     'dashboardCurrencyExchange.crypto.livePrices': 'Prix en direct',
 
+    'dashboardCurrencyExchange.cross.title': 'Échange fiat ↔ crypto',
+    'dashboardCurrencyExchange.cross.liveRatesSource': 'Taux fiat et prix crypto en direct',
+    'dashboardCurrencyExchange.cross.direction': 'Sens',
+    'dashboardCurrencyExchange.cross.fiatToCrypto': 'Fiat vers crypto',
+    'dashboardCurrencyExchange.cross.cryptoToFiat': 'Crypto vers fiat',
+    'dashboardCurrencyExchange.cross.reverse': 'Inverser le sens de l’échange',
+    'dashboardCurrencyExchange.cross.convert': 'Convertir',
+
     'dashboardCurrencyExchange.currencies.usd': 'Dollar américain',
     'dashboardCurrencyExchange.currencies.eur': 'Euro',
     'dashboardCurrencyExchange.currencies.cad': 'Dollar canadien',
+    'dashboardCurrencyExchange.currencies.chf': 'Franc suisse',
 
     'dashboardCurrencyExchange.time.secondsAgo': 's',
     'dashboardCurrencyExchange.time.minutesAgo': ' min',
@@ -137,9 +155,18 @@ registerTranslations({
     'dashboardCurrencyExchange.crypto.livePricesSource': 'Live-Preise über CoinGecko',
     'dashboardCurrencyExchange.crypto.livePrices': 'Live-Preise',
 
+    'dashboardCurrencyExchange.cross.title': 'Fiat- ↔ Krypto-Umtausch',
+    'dashboardCurrencyExchange.cross.liveRatesSource': 'Live-Fiatkurse und Kryptopreise',
+    'dashboardCurrencyExchange.cross.direction': 'Richtung',
+    'dashboardCurrencyExchange.cross.fiatToCrypto': 'Fiat zu Krypto',
+    'dashboardCurrencyExchange.cross.cryptoToFiat': 'Krypto zu Fiat',
+    'dashboardCurrencyExchange.cross.reverse': 'Umtauschrichtung wechseln',
+    'dashboardCurrencyExchange.cross.convert': 'Umtauschen',
+
     'dashboardCurrencyExchange.currencies.usd': 'US-Dollar',
     'dashboardCurrencyExchange.currencies.eur': 'Euro',
     'dashboardCurrencyExchange.currencies.cad': 'Kanadischer Dollar',
+    'dashboardCurrencyExchange.currencies.chf': 'Schweizer Franken',
 
     'dashboardCurrencyExchange.time.secondsAgo': 's zuvor',
     'dashboardCurrencyExchange.time.minutesAgo': ' Min. zuvor',
@@ -185,9 +212,18 @@ registerTranslations({
     'dashboardCurrencyExchange.crypto.livePricesSource': 'Precios en vivo vía CoinGecko',
     'dashboardCurrencyExchange.crypto.livePrices': 'Precios en vivo',
 
+    'dashboardCurrencyExchange.cross.title': 'Cambio fiat ↔ cripto',
+    'dashboardCurrencyExchange.cross.liveRatesSource': 'Tasas fiat y precios cripto en vivo',
+    'dashboardCurrencyExchange.cross.direction': 'Dirección',
+    'dashboardCurrencyExchange.cross.fiatToCrypto': 'Fiat a cripto',
+    'dashboardCurrencyExchange.cross.cryptoToFiat': 'Cripto a fiat',
+    'dashboardCurrencyExchange.cross.reverse': 'Invertir dirección del cambio',
+    'dashboardCurrencyExchange.cross.convert': 'Convertir',
+
     'dashboardCurrencyExchange.currencies.usd': 'Dólar estadounidense',
     'dashboardCurrencyExchange.currencies.eur': 'Euro',
     'dashboardCurrencyExchange.currencies.cad': 'Dólar canadiense',
+    'dashboardCurrencyExchange.currencies.chf': 'Franco suizo',
 
     'dashboardCurrencyExchange.time.secondsAgo': 's atrás',
     'dashboardCurrencyExchange.time.minutesAgo': 'm atrás',
@@ -233,9 +269,18 @@ registerTranslations({
     'dashboardCurrencyExchange.crypto.livePricesSource': 'Prezzi live tramite CoinGecko',
     'dashboardCurrencyExchange.crypto.livePrices': 'Prezzi live',
 
+    'dashboardCurrencyExchange.cross.title': 'Cambio fiat ↔ crypto',
+    'dashboardCurrencyExchange.cross.liveRatesSource': 'Tassi fiat e prezzi crypto in tempo reale',
+    'dashboardCurrencyExchange.cross.direction': 'Direzione',
+    'dashboardCurrencyExchange.cross.fiatToCrypto': 'Fiat in crypto',
+    'dashboardCurrencyExchange.cross.cryptoToFiat': 'Crypto in fiat',
+    'dashboardCurrencyExchange.cross.reverse': 'Inverti la direzione del cambio',
+    'dashboardCurrencyExchange.cross.convert': 'Converti',
+
     'dashboardCurrencyExchange.currencies.usd': 'Dollaro USA',
     'dashboardCurrencyExchange.currencies.eur': 'Euro',
     'dashboardCurrencyExchange.currencies.cad': 'Dollaro canadese',
+    'dashboardCurrencyExchange.currencies.chf': 'Franco svizzero',
 
     'dashboardCurrencyExchange.time.secondsAgo': 's fa',
     'dashboardCurrencyExchange.time.minutesAgo': 'm fa',
@@ -281,9 +326,18 @@ registerTranslations({
     'dashboardCurrencyExchange.crypto.livePricesSource': 'Ζωντανές τιμές μέσω CoinGecko',
     'dashboardCurrencyExchange.crypto.livePrices': 'Ζωντανές τιμές',
 
+    'dashboardCurrencyExchange.cross.title': 'Ανταλλαγή fiat ↔ crypto',
+    'dashboardCurrencyExchange.cross.liveRatesSource': 'Ζωντανές ισοτιμίες fiat και τιμές crypto',
+    'dashboardCurrencyExchange.cross.direction': 'Κατεύθυνση',
+    'dashboardCurrencyExchange.cross.fiatToCrypto': 'Fiat σε crypto',
+    'dashboardCurrencyExchange.cross.cryptoToFiat': 'Crypto σε fiat',
+    'dashboardCurrencyExchange.cross.reverse': 'Αντιστροφή κατεύθυνσης ανταλλαγής',
+    'dashboardCurrencyExchange.cross.convert': 'Μετατροπή',
+
     'dashboardCurrencyExchange.currencies.usd': 'Δολάριο ΗΠΑ',
     'dashboardCurrencyExchange.currencies.eur': 'Ευρώ',
     'dashboardCurrencyExchange.currencies.cad': 'Δολάριο Καναδά',
+    'dashboardCurrencyExchange.currencies.chf': 'Ελβετικό φράγκο',
 
     'dashboardCurrencyExchange.time.secondsAgo': 'δ πριν',
     'dashboardCurrencyExchange.time.minutesAgo': 'λ πριν',

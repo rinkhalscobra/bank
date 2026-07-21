@@ -1,6 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
+import {
+  isMissingIbanColumnError,
+  normalizeIbanRow,
+  toLegacyIbanPayload,
+} from '../lib/ibanCompatibility';
 
 export interface BillPayment {
   id: string;
@@ -26,7 +31,7 @@ export function useBillPayments() {
   const [payments, setPayments] = useState<BillPayment[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const fetchPayments = async () => {
+  const fetchPayments = useCallback(async () => {
     if (!user) return;
     setLoading(true);
     const { data } = await supabase
@@ -34,9 +39,11 @@ export function useBillPayments() {
       .select('*')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false });
-    setPayments((data as BillPayment[]) || []);
+    setPayments(((data as (BillPayment & { bank_routing_number?: string })[]) || []).map((row) =>
+      normalizeIbanRow('bill_payments', row)
+    ));
     setLoading(false);
-  };
+  }, [user]);
 
   const payBill = async (params: {
     billerName: string;
@@ -52,7 +59,7 @@ export function useBillPayments() {
     bankSwiftCode?: string;
   }) => {
     if (!user) return { error: 'Not authenticated' };
-    const { error } = await supabase.from('bill_payments').insert({
+    const payload = {
       user_id: user.id,
       biller_name: params.billerName,
       amount: params.amount,
@@ -66,14 +73,23 @@ export function useBillPayments() {
       bank_account_number: params.bankAccountNumber || '',
       bank_iban: params.bankIban || '',
       bank_swift_code: params.bankSwiftCode || '',
-    });
+    };
+    let insertResult = await supabase.from('bill_payments').insert(payload);
+
+    if (isMissingIbanColumnError(insertResult.error, 'bill_payments')) {
+      insertResult = await supabase
+        .from('bill_payments')
+        .insert(toLegacyIbanPayload('bill_payments', payload));
+    }
+
+    const { error } = insertResult;
     if (!error) await fetchPayments();
     return { error: error?.message || null };
   };
 
   useEffect(() => {
-    fetchPayments();
-  }, [user]);
+    void fetchPayments();
+  }, [fetchPayments]);
 
   return { payments, loading, refetch: fetchPayments, payBill };
 }
