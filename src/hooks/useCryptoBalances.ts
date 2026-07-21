@@ -8,6 +8,7 @@ export interface CryptoBalance {
   user_id: string;
   symbol: string;
   name: string;
+  display_order: number;
   balance: number;
   status: BalanceAvailabilityStatus;
   created_at: string;
@@ -27,20 +28,30 @@ export function useCryptoBalances(targetUserId?: string) {
     }
 
     setLoading(true);
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('crypto_balances')
       .select('*')
       .eq('user_id', resolvedUserId)
       .order('created_at', { ascending: true });
-    const normalized = ((data as Partial<CryptoBalance>[]) || []).map((row) => ({
-      id: String(row.id || ''),
-      user_id: String(row.user_id || ''),
-      symbol: String(row.symbol || ''),
-      name: String(row.name || ''),
-      balance: Number(row.balance || 0),
-      status: normalizeBalanceStatus(row.status),
-      created_at: String(row.created_at || ''),
-    }));
+
+    if (error) {
+      setCryptoBalances([]);
+      setLoading(false);
+      return;
+    }
+
+    const normalized = ((data as Partial<CryptoBalance>[]) || [])
+      .map((row) => ({
+        id: String(row.id || ''),
+        user_id: String(row.user_id || ''),
+        symbol: String(row.symbol || ''),
+        name: String(row.name || ''),
+        display_order: Number(row.display_order || 0),
+        balance: Number(row.balance || 0),
+        status: normalizeBalanceStatus(row.status),
+        created_at: String(row.created_at || ''),
+      }))
+      .sort((left, right) => left.display_order - right.display_order);
     setCryptoBalances(normalized);
     setLoading(false);
   };

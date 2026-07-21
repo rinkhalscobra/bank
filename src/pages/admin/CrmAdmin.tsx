@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   AlertCircle,
+  ArrowDown,
+  ArrowUp,
   Check,
   Copy,
   CreditCard,
@@ -122,6 +124,8 @@ type BalanceRow = AdminRow & {
   balance_kind: 'fiat' | 'crypto';
   asset_code: string;
   asset_name: string;
+  __has_display_order: boolean;
+  display_order: number;
   balance: number;
   status: BalanceAvailabilityStatus;
 };
@@ -632,6 +636,8 @@ function normalizeBalanceRow(row: AdminRow, sourceTable: BalanceSourceTable): Ba
     balance_kind: sourceTable === 'fiat_balances' ? 'fiat' : 'crypto',
     asset_code: assetCode,
     asset_name: assetName,
+    __has_display_order: Object.prototype.hasOwnProperty.call(row, 'display_order'),
+    display_order: Number(row.display_order || 0),
     balance: Number.isNaN(nextBalance) ? 0 : nextBalance,
     status: normalizeBalanceStatus(row.status),
   };
@@ -739,6 +745,17 @@ function buildBalanceRows(tableData: Record<string, AdminRow[]>) {
   return [...fiatRows, ...cryptoRows].sort((left, right) => {
     if (left.balance_kind !== right.balance_kind) {
       return left.balance_kind === 'fiat' ? -1 : 1;
+    }
+
+    if (left.__has_display_order && right.__has_display_order && left.display_order !== right.display_order) {
+      return left.display_order - right.display_order;
+    }
+
+    const leftCreatedAt = new Date(String(left.created_at || '')).getTime();
+    const rightCreatedAt = new Date(String(right.created_at || '')).getTime();
+
+    if (Number.isFinite(leftCreatedAt) && Number.isFinite(rightCreatedAt) && leftCreatedAt !== rightCreatedAt) {
+      return leftCreatedAt - rightCreatedAt;
     }
 
     return left.asset_code.localeCompare(right.asset_code);
@@ -2317,7 +2334,13 @@ function BalanceGroupedRow({
   editing,
   saving,
   deleting,
+  reordering,
+  orderControlsDisabled,
+  canMoveUp,
+  canMoveDown,
   onEdit,
+  onMoveUp,
+  onMoveDown,
   onSave,
   onDelete,
   onCancel,
@@ -2326,7 +2349,13 @@ function BalanceGroupedRow({
   editing: boolean;
   saving: boolean;
   deleting: boolean;
+  reordering: boolean;
+  orderControlsDisabled: boolean;
+  canMoveUp: boolean;
+  canMoveDown: boolean;
   onEdit: () => void;
+  onMoveUp: () => Promise<void>;
+  onMoveDown: () => Promise<void>;
   onSave: (nextBalance: string) => Promise<void>;
   onDelete: () => Promise<void>;
   onCancel: () => void;
@@ -2334,7 +2363,7 @@ function BalanceGroupedRow({
   const [balance, setBalance] = useState(String(row.balance));
   const isFiat = row.balance_kind === 'fiat';
   const supportsFormattedFiatInput = shouldNormalizeFiatBalanceInput(row);
-  const isBusy = saving || deleting;
+  const isBusy = saving || deleting || orderControlsDisabled;
 
   useEffect(() => {
     if (editing) {
@@ -2344,7 +2373,7 @@ function BalanceGroupedRow({
 
   return (
     <article className="bg-white px-5 py-5 sm:px-6">
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(170px,220px)_minmax(220px,300px)] lg:items-center">
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(170px,220px)_minmax(340px,auto)] lg:items-center">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <span className={`rounded-full px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] ${isFiat ? 'bg-[#006446]/10 text-[#006446]' : 'bg-slate-900 text-white'}`}>
@@ -2374,10 +2403,39 @@ function BalanceGroupedRow({
             </span>
           ) : (
             <>
+              {reordering ? (
+                <span className="inline-flex h-11 w-[92px] items-center justify-center rounded-full border border-[#006446]/12 bg-[#006446]/[0.04] text-[#006446]">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                </span>
+              ) : (
+                <div className="inline-flex overflow-hidden rounded-full border border-[#006446]/12 bg-white">
+                  <button
+                    type="button"
+                    onClick={() => void onMoveUp()}
+                    disabled={orderControlsDisabled || !canMoveUp}
+                    title={`Move ${row.asset_code} up`}
+                    aria-label={`Move ${row.asset_code} up`}
+                    className="inline-flex h-11 w-11 items-center justify-center text-[#006446] transition-colors hover:bg-[#006446]/[0.05] disabled:cursor-not-allowed disabled:text-slate-300"
+                  >
+                    <ArrowUp className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void onMoveDown()}
+                    disabled={orderControlsDisabled || !canMoveDown}
+                    title={`Move ${row.asset_code} down`}
+                    aria-label={`Move ${row.asset_code} down`}
+                    className="inline-flex h-11 w-11 items-center justify-center border-l border-[#006446]/10 text-[#006446] transition-colors hover:bg-[#006446]/[0.05] disabled:cursor-not-allowed disabled:text-slate-300"
+                  >
+                    <ArrowDown className="h-4 w-4" />
+                  </button>
+                </div>
+              )}
+
               <button
                 type="button"
                 onClick={onEdit}
-                disabled={deleting}
+                disabled={isBusy}
                 className={`inline-flex min-h-[44px] items-center justify-center rounded-full border bg-white px-4 py-2 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-70 ${isFiat ? 'border-[#006446]/12 text-[#006446] hover:bg-[#006446]/[0.05]' : 'border-slate-200 text-slate-700 hover:bg-slate-50'}`}
               >
                 Edit balance
@@ -2386,7 +2444,7 @@ function BalanceGroupedRow({
               <button
                 type="button"
                 onClick={() => void onDelete()}
-                disabled={deleting}
+                disabled={isBusy}
                 className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-full border border-red-200 bg-white px-4 py-2 text-sm font-semibold text-red-600 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-70"
               >
                 {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
@@ -3429,6 +3487,7 @@ export default function CrmAdmin() {
   const [savingNewRecord, setSavingNewRecord] = useState(false);
   const [savingRecordId, setSavingRecordId] = useState<string | null>(null);
   const [deletingRecordId, setDeletingRecordId] = useState<string | null>(null);
+  const [reorderingBalanceId, setReorderingBalanceId] = useState<string | null>(null);
   const [refreshingTable, setRefreshingTable] = useState<string | null>(null);
   const [editingRecordId, setEditingRecordId] = useState<string | null>(null);
   const [isAddingRecord, setIsAddingRecord] = useState(false);
@@ -4434,12 +4493,17 @@ export default function CrmAdmin() {
       }
 
       const targetTable = newBalanceDraft.kind === 'fiat' ? 'fiat_balances' : 'crypto_balances';
+      const nextDisplayOrder = (tableData[targetTable] || []).reduce(
+        (highestOrder, row) => Math.max(highestOrder, Number(row.display_order ?? -1)),
+        -1
+      ) + 1;
       const payload =
         newBalanceDraft.kind === 'fiat'
           ? {
               user_id: selectedUserId,
               currency: trimmedCode,
               name: newBalanceDraft.name.trim() || getDefaultFiatAssetName(trimmedCode),
+              display_order: nextDisplayOrder,
               balance: numericBalance,
               status: balanceCreateStatus,
             }
@@ -4447,11 +4511,31 @@ export default function CrmAdmin() {
               user_id: selectedUserId,
               symbol: trimmedCode,
               name: newBalanceDraft.name.trim() || trimmedCode,
+              display_order: nextDisplayOrder,
               balance: numericBalance,
               status: balanceCreateStatus,
             };
 
-      const { data, error } = await supabase.from(targetTable).insert(payload).select().single();
+      const insertPayload: Record<string, unknown> = { ...payload };
+      const optionalColumns = newBalanceDraft.kind === 'fiat'
+        ? ['name', 'display_order']
+        : ['display_order'];
+      let insertResult = await supabase.from(targetTable).insert(insertPayload).select().single();
+
+      for (let attempt = 0; attempt < optionalColumns.length && insertResult.error; attempt += 1) {
+        const unsupportedColumn = optionalColumns.find(
+          (column) =>
+            Object.prototype.hasOwnProperty.call(insertPayload, column) &&
+            insertResult.error?.message.includes(`'${column}' column`)
+        );
+
+        if (!unsupportedColumn) break;
+
+        delete insertPayload[unsupportedColumn];
+        insertResult = await supabase.from(targetTable).insert(insertPayload).select().single();
+      }
+
+      const { data, error } = insertResult;
 
       if (error) {
         setNotice({ kind: 'error', message: error.message });
@@ -4867,6 +4951,81 @@ export default function CrmAdmin() {
     });
   }
 
+  async function handleBalanceMove(row: BalanceRow, direction: 'up' | 'down') {
+    if (!selectedUserId || reorderingBalanceId) return;
+
+    const orderedRows = row.balance_kind === 'fiat' ? fiatBalanceRows : cryptoBalanceRows;
+    const currentIndex = orderedRows.findIndex((entry) => entry.id === row.id);
+    const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
+
+    if (currentIndex < 0 || targetIndex < 0 || targetIndex >= orderedRows.length) return;
+
+    const reorderedRows = [...orderedRows];
+    [reorderedRows[currentIndex], reorderedRows[targetIndex]] = [
+      reorderedRows[targetIndex],
+      reorderedRows[currentIndex],
+    ];
+
+    setReorderingBalanceId(row.id);
+    setNotice(null);
+
+    try {
+      const useDisplayOrder = reorderedRows.every((balanceRow) => balanceRow.__has_display_order);
+      const existingTimestamps = reorderedRows
+        .map((balanceRow) => new Date(String(balanceRow.created_at || '')).getTime())
+        .filter(Number.isFinite);
+      const baseTimestamp = existingTimestamps.length > 0
+        ? Math.min(...existingTimestamps)
+        : Date.now();
+
+      const results = await Promise.all(
+        reorderedRows.map(async (balanceRow, displayOrder) => {
+          const orderUpdate = useDisplayOrder
+            ? { display_order: displayOrder }
+            : { created_at: new Date(baseTimestamp + displayOrder * 1000).toISOString() };
+          const { data, error } = await supabase
+            .from(balanceRow.source_table)
+            .update(orderUpdate)
+            .eq('id', balanceRow.source_id)
+            .eq('user_id', selectedUserId)
+            .select()
+            .single();
+
+          return { data: data as AdminRow | null, error };
+        })
+      );
+
+      const failedResult = results.find((result) => result.error);
+
+      if (failedResult?.error) {
+        await refreshSingleTable(BALANCES_TABLE);
+        setNotice({ kind: 'error', message: failedResult.error.message });
+        return;
+      }
+
+      const updatedRows = new Map(
+        results
+          .filter((result): result is { data: AdminRow; error: null } => Boolean(result.data))
+          .map((result) => [String(result.data.id), result.data] as const)
+      );
+
+      setTableData((prev) => ({
+        ...prev,
+        [row.source_table]: (prev[row.source_table] || []).map((sourceRow) =>
+          updatedRows.get(String(sourceRow.id)) || sourceRow
+        ),
+      }));
+      setNotice({ kind: 'success', message: `${row.asset_code} moved ${direction}.` });
+    } catch (error) {
+      setNotice({
+        kind: 'error',
+        message: error instanceof Error ? error.message : 'Could not update the balance card order.',
+      });
+    } finally {
+      setReorderingBalanceId(null);
+    }
+  }
+
   async function handleApplyBalanceStatus() {
     if (!selectedUserId) {
       setNotice({ kind: 'error', message: 'Select a customer before updating balance statuses.' });
@@ -5095,7 +5254,7 @@ export default function CrmAdmin() {
     );
   }
 
-  function renderBalanceRow(row: BalanceRow) {
+  function renderBalanceRow(row: BalanceRow, sectionRows: BalanceRow[], rowIndex: number) {
     return (
       <BalanceGroupedRow
         key={row.id}
@@ -5103,7 +5262,13 @@ export default function CrmAdmin() {
         editing={editingRecordId === row.id}
         saving={savingRecordId === row.source_id}
         deleting={deletingRecordId === row.source_id}
+        reordering={reorderingBalanceId === row.id}
+        orderControlsDisabled={reorderingBalanceId !== null}
+        canMoveUp={rowIndex > 0}
+        canMoveDown={rowIndex < sectionRows.length - 1}
         onEdit={() => handleStartEditRecord(row.id)}
+        onMoveUp={() => handleBalanceMove(row, 'up')}
+        onMoveDown={() => handleBalanceMove(row, 'down')}
         onSave={(nextBalance) => handleBalanceSave(row, nextBalance)}
         onDelete={() => handleBalanceDelete(row)}
         onCancel={() => setEditingRecordId(null)}
@@ -5146,7 +5311,7 @@ export default function CrmAdmin() {
         </div>
 
         <div className={`divide-y ${isFiat ? 'divide-[#006446]/10' : 'divide-slate-200/80'}`}>
-          {rows.map((row) => renderBalanceRow(row))}
+          {rows.map((row, rowIndex) => renderBalanceRow(row, rows, rowIndex))}
         </div>
       </section>
     );
