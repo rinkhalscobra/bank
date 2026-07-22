@@ -1,1 +1,1 @@
-﻿# SKOK-bank
+﻿# SKOK
