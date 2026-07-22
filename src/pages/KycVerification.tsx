@@ -342,6 +342,9 @@ export default function KycVerification() {
     setSubmitting(true);
     setError('');
 
+    const uploadedPaths: string[] = [];
+    let submissionCreated = false;
+
     try {
       const userId = user.id;
       const timestamp = Date.now();
@@ -352,43 +355,43 @@ export default function KycVerification() {
 
       if (idFrontFile) {
         idFrontUrl = await uploadFile(idFrontFile, `${userId}/id-front-${timestamp}.${idFrontFile.name.split('.').pop()}`);
+        uploadedPaths.push(idFrontUrl);
       }
       if (idBackFile) {
         idBackUrl = await uploadFile(idBackFile, `${userId}/id-back-${timestamp}.${idBackFile.name.split('.').pop()}`);
+        uploadedPaths.push(idBackUrl);
       }
       if (selfieFile) {
         selfieUrl = await uploadFile(selfieFile, `${userId}/selfie-${timestamp}.${selfieFile.name.split('.').pop()}`);
+        uploadedPaths.push(selfieUrl);
       }
 
-      const { error: insertError } = await supabase.from('kyc_submissions').insert({
-        user_id: userId,
-        date_of_birth: dateOfBirth,
-        nationality,
-        id_type: idType,
-        id_number: idNumber,
-        id_front_url: idFrontUrl,
-        id_back_url: idBackUrl,
-        selfie_url: selfieUrl,
-        address_line1: addressLine1,
-        address_line2: addressLine2,
-        city,
-        state,
-        postal_code: postalCode,
-        country,
+      const { error: submissionError } = await supabase.rpc('submit_kyc_verification', {
+        p_date_of_birth: dateOfBirth,
+        p_nationality: nationality,
+        p_id_type: idType,
+        p_id_number: idNumber,
+        p_id_front_url: idFrontUrl,
+        p_id_back_url: idBackUrl,
+        p_selfie_url: selfieUrl,
+        p_address_line1: addressLine1,
+        p_address_line2: addressLine2,
+        p_city: city,
+        p_state: state,
+        p_postal_code: postalCode,
+        p_country: country,
       });
 
-      if (insertError) throw insertError;
-
-      const { error: updateError } = await supabase
-        .from('profiles')
-        .update({ kyc_status: 'submitted' })
-        .eq('id', userId);
-
-      if (updateError) throw updateError;
+      if (submissionError) throw submissionError;
+      submissionCreated = true;
 
       await refreshKycStatus();
-      navigate('/kyc-status');
+      navigate('/kyc-status', { replace: true });
     } catch (err: unknown) {
+      if (!submissionCreated && uploadedPaths.length > 0) {
+        await supabase.storage.from('kyc-documents').remove(uploadedPaths);
+      }
+
       const message = err instanceof Error ? err.message : 'Something went wrong. Please try again.';
       setError(message);
     } finally {
