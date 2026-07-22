@@ -598,6 +598,9 @@ function PersonalInfoStep({
           onChange={setNationality}
           options={COUNTRY_OPTIONS}
           placeholder="Select nationality"
+          searchable
+          searchPlaceholder="Search countries..."
+          emptyMessage="No countries found"
           className="w-full"
         />
       </div>
@@ -677,6 +680,9 @@ function AddressStep({
             onChange={setCountry}
             options={COUNTRY_OPTIONS}
             placeholder="Select"
+            searchable
+            searchPlaceholder="Search countries..."
+            emptyMessage="No countries found"
             className="w-full"
           />
         </div>

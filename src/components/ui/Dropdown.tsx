@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { ChevronDown, Check } from 'lucide-react';
+import { ChevronDown, Check, Search } from 'lucide-react';
 
 interface DropdownOption {
   value: string;
@@ -14,12 +14,33 @@ interface DropdownProps {
   onChange: (value: string) => void;
   placeholder?: string;
   className?: string;
+  searchable?: boolean;
+  searchPlaceholder?: string;
+  emptyMessage?: string;
 }
 
-export default function Dropdown({ value, options, onChange, placeholder, className = '' }: DropdownProps) {
+function normalizeSearchValue(value: string) {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLocaleLowerCase();
+}
+
+export default function Dropdown({
+  value,
+  options,
+  onChange,
+  placeholder,
+  className = '',
+  searchable = false,
+  searchPlaceholder = 'Search...',
+  emptyMessage = 'No options found',
+}: DropdownProps) {
   const [open, setOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
   const ref = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const [menuPosition, setMenuPosition] = useState({
     left: 0,
     top: 0,
@@ -76,6 +97,18 @@ export default function Dropdown({ value, options, onChange, placeholder, classN
     };
   }, []);
 
+  useEffect(() => {
+    if (!open) {
+      setSearchQuery('');
+      return;
+    }
+
+    if (!searchable) return;
+
+    const focusFrame = window.requestAnimationFrame(() => searchInputRef.current?.focus());
+    return () => window.cancelAnimationFrame(focusFrame);
+  }, [open, searchable]);
+
   useLayoutEffect(() => {
     if (!open) return;
 
@@ -89,6 +122,14 @@ export default function Dropdown({ value, options, onChange, placeholder, classN
   }, [open, options.length, updateMenuPosition]);
 
   const selected = options.find((o) => o.value === value);
+  const filteredOptions = useMemo(() => {
+    const normalizedQuery = normalizeSearchValue(searchQuery.trim());
+    if (!searchable || !normalizedQuery) return options;
+
+    return options.filter((option) =>
+      normalizeSearchValue(`${option.label} ${option.value}`).includes(normalizedQuery)
+    );
+  }, [options, searchQuery, searchable]);
 
   return (
     <div ref={ref} className={`relative ${className}`}>
@@ -116,33 +157,54 @@ export default function Dropdown({ value, options, onChange, placeholder, classN
       {open && createPortal(
         <div
           ref={menuRef}
-          role="listbox"
           style={menuPosition}
-          className="fixed z-[9999] overflow-auto rounded-2xl border border-[#006446]/14 bg-white py-1 shadow-[0_24px_70px_-38px_rgba(0,100,70,0.45)] animate-in"
+          className="fixed z-[9999] flex flex-col overflow-hidden rounded-2xl border border-[#006446]/14 bg-white shadow-[0_24px_70px_-38px_rgba(0,100,70,0.45)] animate-in"
         >
-          {options.map((opt) => {
-            const isSelected = opt.value === value;
-            return (
-              <button
-                key={opt.value}
-                type="button"
-                role="option"
-                aria-selected={isSelected}
-                onClick={() => {
-                  onChange(opt.value);
-                  setOpen(false);
-                }}
-                className={`
-                  w-full min-w-0 flex items-center gap-2.5 px-3.5 py-2.5 text-sm text-left transition-colors
-                  ${isSelected ? 'bg-[#006446]/10 text-[#006446]' : 'text-slate-700 hover:bg-[#006446]/[0.05] hover:text-[#006446]'}
-                `}
-              >
-                {opt.icon && <span className="flex-shrink-0">{opt.icon}</span>}
-                <span className="min-w-0 flex-1 truncate">{opt.label}</span>
-                {isSelected && <Check className="w-3.5 h-3.5 text-[#006446] flex-shrink-0" />}
-              </button>
-            );
-          })}
+          {searchable && (
+            <div className="flex-shrink-0 border-b border-[#006446]/10 bg-white p-2">
+              <div className="flex items-center gap-2 rounded-xl border border-[#006446]/15 bg-[#006446]/[0.03] px-3 focus-within:border-[#006446]/30 focus-within:ring-2 focus-within:ring-[#006446]/10">
+                <Search className="h-4 w-4 flex-shrink-0 text-[#006446]/65" />
+                <input
+                  ref={searchInputRef}
+                  type="search"
+                  value={searchQuery}
+                  onChange={(event) => setSearchQuery(event.target.value)}
+                  placeholder={searchPlaceholder}
+                  autoComplete="off"
+                  aria-label={searchPlaceholder}
+                  className="min-w-0 flex-1 bg-transparent py-2.5 text-sm text-slate-900 outline-none placeholder:text-slate-400"
+                />
+              </div>
+            </div>
+          )}
+
+          <div role="listbox" className="min-h-0 flex-1 overflow-y-auto py-1">
+            {filteredOptions.length === 0 ? (
+              <p className="px-4 py-5 text-center text-sm text-slate-500">{emptyMessage}</p>
+            ) : filteredOptions.map((opt) => {
+              const isSelected = opt.value === value;
+              return (
+                <button
+                  key={opt.value}
+                  type="button"
+                  role="option"
+                  aria-selected={isSelected}
+                  onClick={() => {
+                    onChange(opt.value);
+                    setOpen(false);
+                  }}
+                  className={`
+                    w-full min-w-0 flex items-center gap-2.5 px-3.5 py-2.5 text-sm text-left transition-colors
+                    ${isSelected ? 'bg-[#006446]/10 text-[#006446]' : 'text-slate-700 hover:bg-[#006446]/[0.05] hover:text-[#006446]'}
+                  `}
+                >
+                  {opt.icon && <span className="flex-shrink-0">{opt.icon}</span>}
+                  <span className="min-w-0 flex-1 truncate">{opt.label}</span>
+                  {isSelected && <Check className="w-3.5 h-3.5 text-[#006446] flex-shrink-0" />}
+                </button>
+              );
+            })}
+          </div>
         </div>,
         document.body,
       )}
