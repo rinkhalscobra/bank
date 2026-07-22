@@ -20,14 +20,14 @@ export function useCryptoBalances(targetUserId?: string) {
   const [loading, setLoading] = useState(true);
   const resolvedUserId = targetUserId ?? user?.id ?? null;
 
-  const fetchCryptoBalances = useCallback(async () => {
+  const fetchCryptoBalances = useCallback(async (showLoading = true) => {
     if (!resolvedUserId) {
       setCryptoBalances([]);
       setLoading(false);
       return;
     }
 
-    setLoading(true);
+    if (showLoading) setLoading(true);
     const { data, error } = await supabase
       .from('crypto_balances')
       .select('*')
@@ -44,7 +44,7 @@ export function useCryptoBalances(targetUserId?: string) {
       .map((row) => ({
         id: String(row.id || ''),
         user_id: String(row.user_id || ''),
-        symbol: String(row.symbol || ''),
+        symbol: String(row.symbol || '').trim().toUpperCase(),
         name: String(row.name || ''),
         display_order: Number(row.display_order || 0),
         balance: Number(row.balance || 0),
@@ -59,6 +59,28 @@ export function useCryptoBalances(targetUserId?: string) {
   useEffect(() => {
     void fetchCryptoBalances();
   }, [fetchCryptoBalances]);
+
+  useEffect(() => {
+    if (!resolvedUserId) return;
+
+    const channel = supabase
+      .channel(`crypto-balances-${resolvedUserId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'crypto_balances',
+          filter: `user_id=eq.${resolvedUserId}`,
+        },
+        () => void fetchCryptoBalances(false),
+      )
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [fetchCryptoBalances, resolvedUserId]);
 
   return { cryptoBalances, loading, refetch: fetchCryptoBalances };
 }

@@ -20,14 +20,14 @@ export function useFiatBalances(targetUserId?: string) {
   const [loading, setLoading] = useState(true);
   const resolvedUserId = targetUserId ?? user?.id ?? null;
 
-  const fetchFiatBalances = useCallback(async () => {
+  const fetchFiatBalances = useCallback(async (showLoading = true) => {
     if (!resolvedUserId) {
       setFiatBalances([]);
       setLoading(false);
       return;
     }
 
-    setLoading(true);
+    if (showLoading) setLoading(true);
     const { data, error } = await supabase
       .from('fiat_balances')
       .select('*')
@@ -44,7 +44,7 @@ export function useFiatBalances(targetUserId?: string) {
       .map((row) => ({
         id: String(row.id || ''),
         user_id: String(row.user_id || ''),
-        currency: String(row.currency || ''),
+        currency: String(row.currency || '').trim().toUpperCase(),
         name: String(row.name || ''),
         display_order: Number(row.display_order || 0),
         balance: Number(row.balance || 0),
@@ -59,6 +59,28 @@ export function useFiatBalances(targetUserId?: string) {
   useEffect(() => {
     void fetchFiatBalances();
   }, [fetchFiatBalances]);
+
+  useEffect(() => {
+    if (!resolvedUserId) return;
+
+    const channel = supabase
+      .channel(`fiat-balances-${resolvedUserId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'fiat_balances',
+          filter: `user_id=eq.${resolvedUserId}`,
+        },
+        () => void fetchFiatBalances(false),
+      )
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [fetchFiatBalances, resolvedUserId]);
 
   return { fiatBalances, loading, refetch: fetchFiatBalances };
 }

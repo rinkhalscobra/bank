@@ -1,6 +1,11 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
+import {
+  fetchLiveMarketData,
+  type CryptoPrice,
+  type LiveMarketData,
+} from '../lib/exchangeRates';
 
 export interface CurrencyExchange {
   id: string;
@@ -14,11 +19,6 @@ export interface CurrencyExchange {
   created_at: string;
 }
 
-export interface CryptoPrice {
-  usd: number;
-  usd_24h_change: number;
-}
-
 export type CrossAssetDirection = 'fiat_to_crypto' | 'crypto_to_fiat';
 
 export interface CrossAssetExchangeParams {
@@ -30,71 +30,56 @@ export interface CrossAssetExchangeParams {
   exchangeRate: number;
 }
 
-interface RatesResponse {
-  rates: Record<string, Record<string, number>>;
-  crypto: Record<string, CryptoPrice>;
-  fetched_at: string;
+function toCodeKey(codes: string[] | undefined) {
+  if (codes === undefined) return null;
+  return Array.from(new Set(codes.map((code) => code.trim().toUpperCase()).filter(Boolean)))
+    .sort()
+    .join(',');
 }
 
-async function supplementChfRates(rates: Record<string, Record<string, number>>) {
-  if (rates.CHF?.USD) return rates;
-
-  try {
-    const response = await fetch('https://api.frankfurter.app/latest?from=CHF&to=USD,EUR,CAD');
-    if (!response.ok) return rates;
-
-    const data = await response.json() as { rates?: Record<string, number> };
-    if (!data.rates?.USD) return rates;
-
-    const supplemented = Object.fromEntries(
-      Object.entries(rates).map(([currency, currencyRates]) => [currency, { ...currencyRates }])
-    ) as Record<string, Record<string, number>>;
-    supplemented.CHF = { ...data.rates };
-
-    Object.entries(data.rates).forEach(([currency, rate]) => {
-      if (rate > 0) {
-        supplemented[currency] = { ...(supplemented[currency] || {}), CHF: 1 / rate };
-      }
-    });
-
-    return supplemented;
-  } catch {
-    return rates;
-  }
-}
-
-export function useLiveRates() {
+export function useLiveRates(fiatCurrencies?: string[], cryptoSymbols?: string[]) {
   const [rates, setRates] = useState<Record<string, Record<string, number>>>({});
   const [cryptoPrices, setCryptoPrices] = useState<Record<string, CryptoPrice>>({});
   const [fetchedAt, setFetchedAt] = useState<string | null>(null);
+  const [marketData, setMarketData] = useState<LiveMarketData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const latestRequestRef = useRef(0);
+  const fiatKey = toCodeKey(fiatCurrencies);
+  const cryptoKey = toCodeKey(cryptoSymbols);
+  const requestKey = `${fiatKey ?? 'default'}|${cryptoKey ?? 'default'}`;
+  const [loadedRequestKey, setLoadedRequestKey] = useState<string | null>(null);
 
   const fetchRates = useCallback(async () => {
+    const requestId = latestRequestRef.current + 1;
+    latestRequestRef.current = requestId;
     setLoading(true);
     setError(null);
     try {
-      const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/exchange-rates`;
-      const res = await fetch(url, {
-        headers: {
-          apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
-          'Content-Type': 'application/json',
-        },
+      const data = await fetchLiveMarketData({
+        fiatCurrencies: fiatKey === null ? undefined : fiatKey.split(',').filter(Boolean),
+        cryptoSymbols: cryptoKey === null ? undefined : cryptoKey.split(',').filter(Boolean),
       });
-      if (!res.ok) throw new Error('Failed to fetch rates');
-      const data: RatesResponse = await res.json();
-      const supplementedRates = await supplementChfRates(data.rates);
-      setRates(supplementedRates);
+      if (requestId !== latestRequestRef.current) return data;
+
+      setRates(data.rates || {});
       setCryptoPrices(data.crypto || {});
       setFetchedAt(data.fetched_at);
-      return { ...data, rates: supplementedRates };
-    } catch {
-      setError('Unable to load live rates');
+      setMarketData(data);
+      setLoadedRequestKey(requestKey);
+      setError(data.fiat_error || data.crypto_error || null);
+      return data;
+    } catch (caughtError) {
+      if (requestId === latestRequestRef.current) {
+        setError(caughtError instanceof Error ? caughtError.message : 'Unable to load live rates');
+      }
       return null;
     } finally {
-      setLoading(false);
+      if (requestId === latestRequestRef.current) {
+        setLoading(false);
+      }
     }
-  }, []);
+  }, [cryptoKey, fiatKey, requestKey]);
 
   useEffect(() => {
     fetchRates();
@@ -102,7 +87,17 @@ export function useLiveRates() {
     return () => clearInterval(interval);
   }, [fetchRates]);
 
-  return { rates, cryptoPrices, fetchedAt, loading, error, refetchRates: fetchRates };
+  return {
+    rates,
+    cryptoPrices,
+    fetchedAt,
+    loading,
+    ready: loadedRequestKey === requestKey,
+    error,
+    unsupportedFiatCurrencies: marketData?.unsupported_fiat_currencies || [],
+    unsupportedCryptoSymbols: marketData?.unsupported_crypto_symbols || [],
+    refetchRates: fetchRates,
+  };
 }
 
 export function useCurrencyExchange(targetUserId?: string) {

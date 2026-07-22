@@ -31,13 +31,6 @@ type CurrencyExchangeControlPanelProps = {
   onSuccess?: () => Promise<void> | void;
 };
 
-const CURRENCY_INFO: Record<string, { symbol: string; nameKey: string }> = {
-  USD: { symbol: '$', nameKey: 'dashboardCurrencyExchange.currencies.usd' },
-  EUR: { symbol: 'EUR', nameKey: 'dashboardCurrencyExchange.currencies.eur' },
-  CAD: { symbol: 'CAD', nameKey: 'dashboardCurrencyExchange.currencies.cad' },
-  CHF: { symbol: 'CHF', nameKey: 'dashboardCurrencyExchange.currencies.chf' },
-};
-
 const CRYPTO_NAMES: Record<string, string> = {
   BTC: 'Bitcoin',
   ETH: 'Ethereum',
@@ -45,8 +38,6 @@ const CRYPTO_NAMES: Record<string, string> = {
   USDT: 'Tether',
   USDC: 'USD Coin',
 };
-
-const SUPPORTED_CURRENCIES = ['USD', 'EUR', 'CAD', 'CHF'];
 
 function getCrossAssetRate(
   direction: CrossAssetDirection,
@@ -71,11 +62,29 @@ function getCrossAssetRate(
 }
 
 function formatFiat(amount: number, currency: string = 'USD') {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency,
-    minimumFractionDigits: 2,
-  }).format(amount);
+  try {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency,
+      minimumFractionDigits: 2,
+    }).format(amount);
+  } catch {
+    return `${currency} ${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  }
+}
+
+function getCurrencySymbol(currency: string) {
+  if (!currency) return '';
+
+  try {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency,
+      currencyDisplay: 'narrowSymbol',
+    }).formatToParts(0).find((part) => part.type === 'currency')?.value || currency;
+  } catch {
+    return currency;
+  }
 }
 
 function formatUsd(amount: number) {
@@ -100,13 +109,27 @@ export default function CurrencyExchangeControlPanel({
 }: CurrencyExchangeControlPanelProps) {
   const { t } = useLanguage();
   const { loading, executeExchange, executeCryptoSwap, executeCrossAssetExchange } = useCurrencyExchange(userId);
-  const { rates, cryptoPrices, fetchedAt, loading: ratesLoading, error: ratesError, refetchRates } = useLiveRates();
   const { fiatBalances, loading: fiatLoading, refetch: refetchFiat } = useFiatBalances(userId);
   const { cryptoBalances, loading: cryptoLoading, refetch: refetchCrypto } = useCryptoBalances(userId);
+  const fiatRateCurrencies = fiatBalances.map((balance) => balance.currency);
+  const cryptoRateSymbols = cryptoBalances.map((balance) => balance.symbol);
+  const {
+    rates,
+    cryptoPrices,
+    fetchedAt,
+    loading: ratesLoading,
+    ready: ratesReady,
+    error: ratesError,
+    unsupportedFiatCurrencies,
+    unsupportedCryptoSymbols,
+    refetchRates,
+  } = useLiveRates(fiatRateCurrencies, cryptoRateSymbols);
   const isCrmVariant = variant === 'crm';
-  const isLoading = loading || fiatLoading || cryptoLoading;
+  const isLoading = loading || fiatLoading || cryptoLoading || !ratesReady || (ratesLoading && !fetchedAt);
   const availableFiatBalances = fiatBalances.filter((balance) => isBalanceAvailable(balance.status));
   const availableCryptoBalances = cryptoBalances.filter((balance) => isBalanceAvailable(balance.status));
+  const exchangeableFiatBalances = availableFiatBalances.filter((balance) => Boolean(rates[balance.currency]));
+  const exchangeableCryptoBalances = availableCryptoBalances.filter((balance) => Boolean(cryptoPrices[balance.symbol]));
   const restrictedFiatCount = fiatBalances.length - availableFiatBalances.length;
   const restrictedCryptoCount = cryptoBalances.length - availableCryptoBalances.length;
 
@@ -145,31 +168,48 @@ export default function CurrencyExchangeControlPanel({
     setCrossResult(null);
   }, [userId]);
 
-  const cryptoSymbols = Object.keys(cryptoPrices);
-  const fiatOptions = SUPPORTED_CURRENCIES.map((cur) => {
-    const bal = availableFiatBalances.find((balance) => balance.currency === cur);
+  const cryptoSymbols = exchangeableCryptoBalances.map((balance) => balance.symbol);
+  const fiatOptions = exchangeableFiatBalances.map((balance) => {
+    const currency = balance.currency;
+    const currencyName = balance.name.trim() || currency;
     return {
-      value: cur,
-      label: `${t(CURRENCY_INFO[cur]?.nameKey || cur)} (${CURRENCY_INFO[cur]?.symbol}) - ${bal ? formatFiat(bal.balance, cur) : formatFiat(0, cur)}`,
+      value: currency,
+      label: `${currencyName} (${currency}) - ${formatFiat(balance.balance, currency)}`,
       icon: (
         <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-[#006446]/10 text-[10px] font-semibold text-[#006446]">
-          {cur}
+          {currency}
         </span>
       ),
     };
   });
-  const cryptoOptions = cryptoSymbols.map((sym) => {
-    const bal = availableCryptoBalances.find((balance) => balance.symbol === sym);
+  const cryptoOptions = exchangeableCryptoBalances.map((balance) => {
+    const symbol = balance.symbol;
     return {
-      value: sym,
-      label: `${CRYPTO_NAMES[sym] || sym} (${sym}) - ${bal ? formatCryptoAmount(bal.balance) : '0'}`,
+      value: symbol,
+      label: `${balance.name.trim() || CRYPTO_NAMES[symbol] || symbol} (${symbol}) - ${formatCryptoAmount(balance.balance)}`,
       icon: (
         <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-[#006446]/10 text-[10px] font-semibold text-[#006446]">
-          {sym.slice(0, 2)}
+          {symbol.slice(0, 2)}
         </span>
       ),
     };
   });
+  const liveFiatPairs = exchangeableFiatBalances.flatMap((fromBalance, fromIndex) =>
+    exchangeableFiatBalances
+      .slice(fromIndex + 1)
+      .filter((toBalance) => rates[fromBalance.currency]?.[toBalance.currency])
+      .map((toBalance) => ({
+        from: fromBalance.currency,
+        to: toBalance.currency,
+        rate: rates[fromBalance.currency][toBalance.currency],
+      }))
+  );
+  const unsupportedConfiguredFiat = unsupportedFiatCurrencies.filter((currency) =>
+    availableFiatBalances.some((balance) => balance.currency === currency)
+  );
+  const unsupportedConfiguredCrypto = unsupportedCryptoSymbols.filter((symbol) =>
+    availableCryptoBalances.some((balance) => balance.symbol === symbol)
+  );
 
   const fiatNum = parseFloat(fiatAmount) || 0;
   const fiatRate =
@@ -431,6 +471,17 @@ export default function CurrencyExchangeControlPanel({
         </div>
       )}
 
+      {(unsupportedConfiguredFiat.length > 0 || unsupportedConfiguredCrypto.length > 0) && (
+        <div className="flex items-start gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>
+            Live quotes are unavailable for{' '}
+            {[...unsupportedConfiguredFiat, ...unsupportedConfiguredCrypto].join(', ')}.
+            Those balances remain visible in the account but are excluded from exchange controls.
+          </span>
+        </div>
+      )}
+
       <div className="grid gap-6 lg:grid-cols-2">
         <div className="overflow-visible rounded-2xl border border-[#006446]/14 bg-white shadow-[0_24px_60px_-48px_rgba(0,100,70,0.45)]">
           <div className="rounded-t-2xl border-b border-[#006446]/10 bg-gradient-to-r from-[#006446]/[0.04] to-white px-6 py-4">
@@ -471,9 +522,11 @@ export default function CurrencyExchangeControlPanel({
                 <Dropdown
                   value={fromCurrency}
                   onChange={setFromCurrency}
-                  options={fiatOptions.filter((option) => availableFiatBalances.some((balance) => balance.currency === option.value))}
+                  options={fiatOptions}
                   placeholder={t('dashboardCurrencyExchange.placeholders.selectCurrency')}
                   className="w-full"
+                  searchable={fiatOptions.length > 6}
+                  searchPlaceholder="Search currencies..."
                 />
               </div>
 
@@ -483,7 +536,7 @@ export default function CurrencyExchangeControlPanel({
                 </label>
                 <div className="relative">
                   <span className="pointer-events-none absolute left-3 top-1/2 flex w-12 -translate-y-1/2 items-center text-sm font-semibold text-[#006446]">
-                    {CURRENCY_INFO[fromCurrency]?.symbol || '$'}
+                    {getCurrencySymbol(fromCurrency)}
                   </span>
                   <input
                     type="number"
@@ -517,9 +570,11 @@ export default function CurrencyExchangeControlPanel({
                 <Dropdown
                   value={toCurrency}
                   onChange={setToCurrency}
-                  options={fiatOptions.filter((option) => option.value !== fromCurrency && availableFiatBalances.some((balance) => balance.currency === option.value))}
+                  options={fiatOptions.filter((option) => option.value !== fromCurrency)}
                   placeholder={t('dashboardCurrencyExchange.placeholders.selectCurrency')}
                   className="w-full"
+                  searchable={fiatOptions.length > 6}
+                  searchPlaceholder="Search currencies..."
                 />
               </div>
 
@@ -542,35 +597,31 @@ export default function CurrencyExchangeControlPanel({
 
               <button
                 type="submit"
-                disabled={fiatSubmitting || fiatNum <= 0 || fiatRate <= 0 || fromCurrency === toCurrency || fiatInsufficient || availableFiatBalances.length < 2}
+                disabled={fiatSubmitting || fiatNum <= 0 || fiatRate <= 0 || fromCurrency === toCurrency || fiatInsufficient || exchangeableFiatBalances.length < 2}
                 className="w-full rounded-xl bg-[#006446] py-3 text-sm font-semibold text-white transition-colors hover:bg-[#00523a] disabled:bg-slate-200 disabled:text-slate-400"
               >
                 {fiatSubmitting ? t('dashboardCurrencyExchange.actions.processing') : t('dashboardCurrencyExchange.actions.exchange')}
               </button>
 
-              {availableFiatBalances.length < 2 ? (
+              {exchangeableFiatBalances.length < 2 ? (
                 <p className="text-xs text-slate-400">
                   {getLocalizedBalanceRestrictionMessage(t, 'needTwoFiat')}
                 </p>
               ) : null}
             </form>
 
-            {Object.keys(rates).length > 0 && (
+            {liveFiatPairs.length > 0 && (
               <div className="mt-5 border-t border-[#006446]/10 pt-5">
                 <p className="mb-2 text-[11px] font-medium uppercase tracking-wider text-[#006446]/70">
                   {t('dashboardCurrencyExchange.fiat.liveRates')}
                 </p>
                 <div className="grid grid-cols-2 gap-2">
-                  {SUPPORTED_CURRENCIES.flatMap((from) =>
-                    SUPPORTED_CURRENCIES
-                      .filter((to) => to > from && rates[from]?.[to])
-                      .map((to) => (
-                        <div key={`${from}-${to}`} className="flex items-center justify-between rounded-xl border border-[#006446]/10 bg-[#006446]/[0.04] px-3 py-2">
-                          <span className="text-xs font-medium text-[#006446]">{from}/{to}</span>
-                          <span className="text-xs font-mono text-slate-900">{rates[from][to].toFixed(4)}</span>
-                        </div>
-                      ))
-                  )}
+                  {liveFiatPairs.map(({ from, to, rate }) => (
+                    <div key={`${from}-${to}`} className="flex items-center justify-between rounded-xl border border-[#006446]/10 bg-[#006446]/[0.04] px-3 py-2">
+                      <span className="text-xs font-medium text-[#006446]">{from}/{to}</span>
+                      <span className="text-xs font-mono text-slate-900">{rate.toFixed(4)}</span>
+                    </div>
+                  ))}
                 </div>
               </div>
             )}
@@ -616,9 +667,11 @@ export default function CurrencyExchangeControlPanel({
                 <Dropdown
                   value={fromCrypto}
                   onChange={setFromCrypto}
-                  options={cryptoOptions.filter((option) => availableCryptoBalances.some((balance) => balance.symbol === option.value))}
+                  options={cryptoOptions}
                   placeholder={t('dashboardCurrencyExchange.placeholders.selectToken')}
                   className="w-full"
+                  searchable={cryptoOptions.length > 6}
+                  searchPlaceholder="Search tokens..."
                 />
               </div>
 
@@ -675,9 +728,11 @@ export default function CurrencyExchangeControlPanel({
                 <Dropdown
                   value={toCrypto}
                   onChange={setToCrypto}
-                  options={cryptoOptions.filter((option) => option.value !== fromCrypto && availableCryptoBalances.some((balance) => balance.symbol === option.value))}
+                  options={cryptoOptions.filter((option) => option.value !== fromCrypto)}
                   placeholder={t('dashboardCurrencyExchange.placeholders.selectToken')}
                   className="w-full"
+                  searchable={cryptoOptions.length > 6}
+                  searchPlaceholder="Search tokens..."
                 />
               </div>
 
@@ -712,13 +767,13 @@ export default function CurrencyExchangeControlPanel({
 
               <button
                 type="submit"
-                disabled={cryptoSubmitting || cryptoNum <= 0 || !fromCrypto || !toCrypto || fromCrypto === toCrypto || cryptoInsufficient || toPrice <= 0 || availableCryptoBalances.length < 2}
+                disabled={cryptoSubmitting || cryptoNum <= 0 || !fromCrypto || !toCrypto || fromCrypto === toCrypto || cryptoInsufficient || toPrice <= 0 || exchangeableCryptoBalances.length < 2}
                 className="w-full rounded-xl bg-[#006446] py-3 text-sm font-semibold text-white transition-colors hover:bg-[#00523a] disabled:bg-slate-200 disabled:text-slate-400"
               >
                 {cryptoSubmitting ? t('dashboardCurrencyExchange.actions.processing') : t('dashboardCurrencyExchange.actions.swap')}
               </button>
 
-              {availableCryptoBalances.length < 2 ? (
+              {exchangeableCryptoBalances.length < 2 ? (
                 <p className="text-xs text-slate-400">
                   You need at least two available crypto balances to swap assets.
                 </p>
@@ -821,12 +876,14 @@ export default function CurrencyExchangeControlPanel({
                 }}
                 options={(crossSourceIsFiat ? fiatOptions : cryptoOptions).filter((option) =>
                   crossSourceIsFiat
-                    ? availableFiatBalances.some((balance) => balance.currency === option.value)
-                    : availableCryptoBalances.some((balance) => balance.symbol === option.value)
+                    ? exchangeableFiatBalances.some((balance) => balance.currency === option.value)
+                    : exchangeableCryptoBalances.some((balance) => balance.symbol === option.value)
                 )}
                 placeholder={crossSourceIsFiat
                   ? t('dashboardCurrencyExchange.placeholders.selectCurrency')
                   : t('dashboardCurrencyExchange.placeholders.selectToken')}
+                searchable={(crossSourceIsFiat ? fiatOptions : cryptoOptions).length > 6}
+                searchPlaceholder={crossSourceIsFiat ? 'Search currencies...' : 'Search tokens...'}
               />
             </div>
 
@@ -891,12 +948,14 @@ export default function CurrencyExchangeControlPanel({
                 }}
                 options={(crossSourceIsFiat ? cryptoOptions : fiatOptions).filter((option) =>
                   crossSourceIsFiat
-                    ? availableCryptoBalances.some((balance) => balance.symbol === option.value)
-                    : availableFiatBalances.some((balance) => balance.currency === option.value)
+                    ? exchangeableCryptoBalances.some((balance) => balance.symbol === option.value)
+                    : exchangeableFiatBalances.some((balance) => balance.currency === option.value)
                 )}
                 placeholder={crossSourceIsFiat
                   ? t('dashboardCurrencyExchange.placeholders.selectToken')
                   : t('dashboardCurrencyExchange.placeholders.selectCurrency')}
+                searchable={(crossSourceIsFiat ? cryptoOptions : fiatOptions).length > 6}
+                searchPlaceholder={crossSourceIsFiat ? 'Search tokens...' : 'Search currencies...'}
               />
             </div>
           </div>
@@ -934,8 +993,8 @@ export default function CurrencyExchangeControlPanel({
               crossNum <= 0 ||
               crossRate <= 0 ||
               crossInsufficient ||
-              availableFiatBalances.length === 0 ||
-              availableCryptoBalances.length === 0
+              exchangeableFiatBalances.length === 0 ||
+              exchangeableCryptoBalances.length === 0
             }
             className="w-full rounded-xl bg-[#006446] py-3 text-sm font-semibold text-white transition-colors hover:bg-[#00523a] disabled:bg-slate-200 disabled:text-slate-400"
           >

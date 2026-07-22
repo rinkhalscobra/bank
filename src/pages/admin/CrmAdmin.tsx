@@ -37,6 +37,7 @@ import {
   useBranding,
 } from '../../contexts/BrandingContext';
 import { supabase } from '../../lib/supabase';
+import { fetchLiveMarketData } from '../../lib/exchangeRates';
 import {
   getBalanceStatusClasses,
   getBalanceStatusLabel,
@@ -2906,7 +2907,10 @@ function BalanceCreateCard({
               { value: 'fiat', label: 'Fiat' },
               { value: 'crypto', label: 'Crypto' },
             ]}
-            onChange={(value) => onChange({ kind: value as BalanceDraft['kind'] })}
+            onChange={(value) => {
+              const kind = value as BalanceDraft['kind'];
+              onChange({ kind, code: kind === 'fiat' ? 'USD' : 'BTC', name: '' });
+            }}
           />
         </label>
 
@@ -2918,6 +2922,11 @@ function BalanceCreateCard({
             placeholder={draft.kind === 'fiat' ? 'USD' : 'BTC'}
             className="w-full rounded-xl border border-[#006446]/14 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition-all focus:border-[#006446]/35 focus:ring-2 focus:ring-[#006446]/15"
           />
+          <span className="block text-xs leading-5 text-slate-500">
+            {draft.kind === 'fiat'
+              ? 'Use a live-rate supported 3-letter ISO code, for example GBP or PLN.'
+              : 'Use the CoinGecko ticker symbol, for example XRP or ADA.'}
+          </span>
         </label>
 
         <label className="space-y-2">
@@ -4621,13 +4630,64 @@ export default function CrmAdmin() {
         return;
       }
 
-      if (Number.isNaN(numericBalance)) {
+      if (!Number.isFinite(numericBalance) || numericBalance < 0) {
         setNotice({ kind: 'error', message: 'Enter a valid balance amount.' });
         setSavingNewRecord(false);
         return;
       }
 
       const targetTable = newBalanceDraft.kind === 'fiat' ? 'fiat_balances' : 'crypto_balances';
+      const codeColumn = newBalanceDraft.kind === 'fiat' ? 'currency' : 'symbol';
+      const validCode = newBalanceDraft.kind === 'fiat'
+        ? /^[A-Z]{3}$/.test(trimmedCode)
+        : /^[A-Z0-9]{2,15}$/.test(trimmedCode);
+
+      if (!validCode) {
+        setNotice({
+          kind: 'error',
+          message: newBalanceDraft.kind === 'fiat'
+            ? 'Fiat currency codes must contain exactly 3 letters.'
+            : 'Crypto symbols must contain 2 to 15 letters or numbers.',
+        });
+        setSavingNewRecord(false);
+        return;
+      }
+
+      if ((tableData[targetTable] || []).some((row) => String(row[codeColumn] || '').toUpperCase() === trimmedCode)) {
+        setNotice({ kind: 'error', message: `${trimmedCode} already exists for this customer.` });
+        setSavingNewRecord(false);
+        return;
+      }
+
+      try {
+        const marketData = await fetchLiveMarketData({
+          fiatCurrencies: newBalanceDraft.kind === 'fiat' ? [trimmedCode] : [],
+          cryptoSymbols: newBalanceDraft.kind === 'crypto' ? [trimmedCode] : [],
+          includeCrypto: newBalanceDraft.kind === 'crypto',
+        });
+
+        if (newBalanceDraft.kind === 'fiat') {
+          if (marketData.fiat_error) throw new Error(marketData.fiat_error);
+          if (!marketData.supported_fiat_currencies.includes(trimmedCode)) {
+            throw new Error(`${trimmedCode} is not supported by the live fiat-rate provider.`);
+          }
+        } else {
+          if (marketData.crypto_error) throw new Error(marketData.crypto_error);
+          if (!marketData.crypto[trimmedCode]) {
+            throw new Error(`${trimmedCode} does not have a current CoinGecko market quote.`);
+          }
+        }
+      } catch (marketError) {
+        setNotice({
+          kind: 'error',
+          message: marketError instanceof Error
+            ? marketError.message
+            : 'Could not validate this asset with the live market provider.',
+        });
+        setSavingNewRecord(false);
+        return;
+      }
+
       const nextDisplayOrder = (tableData[targetTable] || []).reduce(
         (highestOrder, row) => Math.max(highestOrder, Number(row.display_order ?? -1)),
         -1
@@ -4679,7 +4739,10 @@ export default function CrmAdmin() {
           ...prev,
           [targetTable]: [data as AdminRow, ...(prev[targetTable] || [])],
         }));
-        setNotice({ kind: 'success', message: `${newBalanceDraft.kind === 'fiat' ? 'Fiat' : 'Crypto'} balance created.` });
+        setNotice({
+          kind: 'success',
+          message: `${newBalanceDraft.kind === 'fiat' ? 'Fiat' : 'Crypto'} balance created and enabled for live exchange.`,
+        });
         resetNewBalanceDraft();
         setIsAddingRecord(false);
       }
