@@ -23,7 +23,7 @@ registerTranslations({
     security: "Security",
     disclosures: "Disclosures",
 
-    footerDescription: "Building lasting relationships and financial security since 1892.",
+    footerDescription: "Building lasting relationships through secure, transparent financial services.",
 
     copyright:
       "© 2026 SKOK Bank. All rights reserved. Member FDIC. Equal Housing Lender.",
@@ -67,7 +67,7 @@ registerTranslations({
     disclosures: "Divulgations",
 
     footerDescription:
-      "Construire des relations durables et une sécurité financière depuis 1892.",
+      "Construire des relations durables grâce à des services financiers sûrs et transparents.",
 
     copyright:
       "© 2026 SKOK Bank. Tous droits réservés. Membre FDIC. Prêteur Equal Housing.",
@@ -111,7 +111,7 @@ registerTranslations({
     disclosures: "Offenlegungen",
 
     footerDescription:
-      "Seit 1892 bauen wir dauerhafte Beziehungen und finanzielle Sicherheit auf.",
+      "Wir schaffen dauerhafte Beziehungen durch sichere und transparente Finanzdienstleistungen.",
 
     copyright:
       "© 2026 SKOK Bank. Alle Rechte vorbehalten.",
@@ -155,7 +155,7 @@ registerTranslations({
     disclosures: "Divulgaciones",
 
     footerDescription:
-      "Construyendo relaciones duraderas y seguridad financiera desde 1892.",
+      "Construimos relaciones duraderas mediante servicios financieros seguros y transparentes.",
 
     copyright:
       "© 2026 SKOK Bank. Todos los derechos reservados.",
@@ -199,7 +199,7 @@ registerTranslations({
     disclosures: "Informazioni",
 
     footerDescription:
-      "Costruiamo relazioni durature e sicurezza finanziaria dal 1892.",
+      "Costruiamo relazioni durature attraverso servizi finanziari sicuri e trasparenti.",
 
     copyright:
       "© 2026 SKOK Bank. Tutti i diritti riservati.",
@@ -243,7 +243,7 @@ registerTranslations({
     disclosures: "Ανακοινώσεις",
 
     footerDescription:
-      "Χτίζοντας μακροχρόνιες σχέσεις και οικονομική ασφάλεια από το 1892.",
+      "Χτίζουμε σταθερές σχέσεις μέσα από ασφαλείς και διαφανείς χρηματοοικονομικές υπηρεσίες.",
 
     copyright:
       "© 2026 SKOK Bank. Με επιφύλαξη παντός δικαιώματος.",

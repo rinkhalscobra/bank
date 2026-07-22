@@ -1,9 +1,9 @@
 export const en = {
-  'home.hero.badge': 'TRUSTED FOR OVER 130 YEARS',
+  'home.hero.badge': 'TRUSTED BANKING',
   'home.hero.title.start': 'Banking Built on ',
   'home.hero.title.highlight': 'Trust',
   'home.hero.title.end': ' and Tradition',
-  'home.hero.subtitle': 'Experience the security and stability of a financial institution with over a century of excellence. Your prosperity is our legacy.',
+  'home.hero.subtitle': 'Secure, stable banking designed around your financial goals. Your prosperity is our priority.',
   'home.hero.cta.account': 'Open an Account',
   'home.hero.cta.consult': 'Schedule Consultation',
 
@@ -31,7 +31,7 @@ export const en = {
   'home.currencies.cad': 'Canadian Dollar',
 
   'home.why.title': 'Why SKOK Bank is Your Perfect Financial Partner',
-  'home.why.subtitle': 'For over 130 years, we\'ve been helping individuals and businesses achieve their financial goals. Our commitment to excellence, security, and personalized service sets us apart.',
+  'home.why.subtitle': 'We help individuals and businesses achieve their financial goals through secure solutions, attentive service, and financial expertise.',
   'home.why.fdic.title': 'FDIC Insured',
   'home.why.fdic.desc': 'Your deposits are protected up to $250,000 per account',
   'home.why.award.title': 'Award-Winning Service',

@@ -1,7 +1,7 @@
 export const fr = {
   'inv.hero.badge': 'Gestion de patrimoine et conseil',
   'inv.hero.title': 'Investissez en toute confiance',
-  'inv.hero.subtitle': 'Construisez, preservez et faites fructifier votre patrimoine grace a des strategies de niveau institutionnel, des conseillers dedies et plus d\'un siecle d\'excellence fiduciaire.',
+  'inv.hero.subtitle': 'Construisez, preservez et faites fructifier votre patrimoine grace a des strategies institutionnelles, des conseillers dedies et un accompagnement fiduciaire rigoureux.',
   'inv.hero.cta1': 'Ouvrir un compte d\'investissement',
   'inv.hero.cta2': 'Parler a un conseiller',
 
@@ -58,7 +58,7 @@ export const fr = {
   'inv.why.fiduciary.title': 'Engagement fiduciaire',
   'inv.why.fiduciary.desc': 'Nous sommes legalement tenus d\'agir dans votre meilleur interet. Chaque recommandation, chaque reequilibrage et chaque strategie est concu avec vos objectifs -- pas les notres -- au centre.',
   'inv.why.track.title': 'Bilan eprouve',
-  'inv.why.track.desc': 'Plus de 130 ans de navigation a travers les cycles de marche, les evolutions economiques et les transitions patrimoniales generationnelles avec une gestion d\'investissement disciplinee et fondee sur la recherche.',
+  'inv.why.track.desc': 'Une gestion d\'investissement disciplinee et fondee sur la recherche pour traverser les cycles de marche, les evolutions economiques et les besoins changeants.',
   'inv.why.pricing.title': 'Tarification transparente',
   'inv.why.pricing.desc': 'Des structures tarifaires claires et echelonnees sans frais caches, sans majorations de transactions et avec des divulgations trimestrielles detaillees des frais pour que vous sachiez toujours exactement ce que vous payez.',
   'inv.why.cta.title': 'Commencez a construire votre patrimoine',
@@ -72,7 +72,7 @@ export const fr = {
 
   'inv.philosophy.badge': 'Notre approche',
   'inv.philosophy.title': 'Une philosophie fondee sur la conviction',
-  'inv.philosophy.desc': 'Depuis plus d\'un siecle, nous aidons des generations de familles a developper et preserver leur patrimoine. Notre philosophie d\'investissement est ancree dans la patience, l\'analyse rigoureuse et la discipline inebranlable -- des principes qui ont prouve leur resilience a travers chaque cycle de marche.',
+  'inv.philosophy.desc': 'Nous aidons les familles a developper et preserver leur patrimoine avec patience, analyse rigoureuse et discipline -- des principes adaptes a chaque cycle de marche.',
   'inv.philosophy.p1.title': 'Creation de valeur a long terme',
   'inv.philosophy.p1.desc': 'Nous nous concentrons sur l\'analyse fondamentale et identifions les opportunites a forte valeur intrinseque, privilegiant la croissance durable aux gains speculatifs a court terme.',
   'inv.philosophy.p2.title': 'Gestion disciplinee des risques',

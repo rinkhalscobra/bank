@@ -1,9 +1,9 @@
 export const it = {
-  'home.hero.badge': 'AFFIDABILE DA OLTRE 130 ANNI',
+  'home.hero.badge': 'SERVIZI BANCARI DI FIDUCIA',
   'home.hero.title.start': 'Banca Fondata sulla ',
   'home.hero.title.highlight': 'Fiducia',
   'home.hero.title.end': ' e la Tradizione',
-  'home.hero.subtitle': 'Scopri la sicurezza e la stabilità di un istituto finanziario con oltre un secolo di eccellenza. La vostra prosperità è il nostro patrimonio.',
+  'home.hero.subtitle': 'Servizi bancari sicuri e stabili, progettati intorno ai vostri obiettivi finanziari. La vostra prosperità è la nostra priorità.',
   'home.hero.cta.account': 'Apri un Conto',
   'home.hero.cta.consult': 'Prenota una Consulenza',
 
@@ -31,7 +31,7 @@ export const it = {
   'home.currencies.cad': 'Dollaro Canadese',
 
   'home.why.title': 'Perché SKOK Bank è il Vostro Partner Finanziario Ideale',
-  'home.why.subtitle': 'Da oltre 130 anni aiutiamo privati e aziende a raggiungere i loro obiettivi finanziari. Il nostro impegno per l\'eccellenza, la sicurezza e il servizio personalizzato ci distingue.',
+  'home.why.subtitle': 'Aiutiamo privati e aziende a raggiungere i loro obiettivi con soluzioni sicure, servizio attento e competenza finanziaria.',
   'home.why.fdic.title': 'Assicurato FDIC',
   'home.why.fdic.desc': 'I vostri depositi sono protetti fino a $250.000 per conto',
   'home.why.award.title': 'Servizio Premiato',

@@ -88,7 +88,7 @@ export default function OnlineBanking() {
               </div>
               <div>
                 <h2 className="text-2xl font-display font-bold text-white">{branding.brandName}</h2>
-                <p className="text-xs tracking-widest text-white/70">EST. 1892</p>
+                <p className="text-xs tracking-widest text-white/70">SECURE ONLINE BANKING</p>
               </div>
             </div>
 

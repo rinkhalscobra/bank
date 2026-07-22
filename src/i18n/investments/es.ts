@@ -1,7 +1,7 @@
 export const es = {
   'inv.hero.badge': 'Gestion de patrimonio y asesoria',
   'inv.hero.title': 'Invierta con confianza',
-  'inv.hero.subtitle': 'Construya, preserve y haga crecer su patrimonio con estrategias de nivel institucional, asesores dedicados y mas de un siglo de excelencia fiduciaria.',
+  'inv.hero.subtitle': 'Construya, preserve y haga crecer su patrimonio con estrategias institucionales, asesores dedicados y orientacion fiduciaria disciplinada.',
   'inv.hero.cta1': 'Abrir cuenta de inversion',
   'inv.hero.cta2': 'Hablar con un asesor',
 
@@ -58,7 +58,7 @@ export const es = {
   'inv.why.fiduciary.title': 'Compromiso fiduciario',
   'inv.why.fiduciary.desc': 'Estamos legalmente obligados a actuar en su mejor interes. Cada recomendacion, cada rebalanceo y cada estrategia esta disenada con sus objetivos -- no los nuestros -- en el centro.',
   'inv.why.track.title': 'Trayectoria comprobada',
-  'inv.why.track.desc': 'Mas de 130 anos navegando ciclos de mercado, cambios economicos y transiciones patrimoniales generacionales con una gestion de inversiones disciplinada y basada en investigacion.',
+  'inv.why.track.desc': 'Gestion de inversiones disciplinada y basada en investigacion para afrontar ciclos de mercado, cambios economicos y nuevas necesidades de los clientes.',
   'inv.why.pricing.title': 'Precios transparentes',
   'inv.why.pricing.desc': 'Estructuras de tarifas claras y escalonadas sin costos ocultos, sin sobreprecios en transacciones y con divulgaciones trimestrales detalladas de tarifas para que siempre sepa exactamente lo que esta pagando.',
   'inv.why.cta.title': 'Comience a construir su patrimonio',
@@ -72,7 +72,7 @@ export const es = {
 
   'inv.philosophy.badge': 'Nuestro enfoque',
   'inv.philosophy.title': 'Una filosofia basada en la conviccion',
-  'inv.philosophy.desc': 'Durante mas de un siglo, hemos ayudado a generaciones de familias a hacer crecer y preservar su patrimonio. Nuestra filosofia de inversion se basa en la paciencia, el analisis riguroso y la disciplina inquebrantable -- principios que han demostrado ser resilientes en cada ciclo de mercado.',
+  'inv.philosophy.desc': 'Ayudamos a las familias a hacer crecer y preservar su patrimonio con paciencia, analisis riguroso y disciplina -- principios preparados para cada ciclo de mercado.',
   'inv.philosophy.p1.title': 'Creacion de valor a largo plazo',
   'inv.philosophy.p1.desc': 'Nos enfocamos en el analisis fundamental e identificamos oportunidades con fuerte valor intrinseco, priorizando el crecimiento sostenible sobre las ganancias especulativas a corto plazo.',
   'inv.philosophy.p2.title': 'Gestion disciplinada del riesgo',

@@ -1,7 +1,7 @@
 export const de = {
   'inv.hero.badge': 'Vermogensverwaltung & Beratung',
   'inv.hero.title': 'Investieren Sie mit Vertrauen',
-  'inv.hero.subtitle': 'Bauen Sie Ihr Vermogen auf, bewahren und vermehren Sie es mit institutionellen Strategien, engagierten Beratern und uber einem Jahrhundert treuhaderischer Exzellenz.',
+  'inv.hero.subtitle': 'Bauen, bewahren und vermehren Sie Ihr Vermogen mit institutionellen Strategien, engagierten Beratern und disziplinierter treuhanderischer Beratung.',
   'inv.hero.cta1': 'Anlagekonto eroffnen',
   'inv.hero.cta2': 'Mit einem Berater sprechen',
 
@@ -58,7 +58,7 @@ export const de = {
   'inv.why.fiduciary.title': 'Treuhänderische Verpflichtung',
   'inv.why.fiduciary.desc': 'Wir sind gesetzlich verpflichtet, in Ihrem besten Interesse zu handeln. Jede Empfehlung, jede Neugewichtung und jede Strategie ist mit Ihren Zielen -- nicht unseren -- im Mittelpunkt gestaltet.',
   'inv.why.track.title': 'Bewährte Erfolgsbilanz',
-  'inv.why.track.desc': 'Uber 130 Jahre Erfahrung in der Navigation durch Marktzyklen, wirtschaftliche Veranderungen und generationenubergreifende Vermogenstransitionen mit disziplinierter, forschungsbasierter Anlageverwaltung.',
+  'inv.why.track.desc': 'Diszipliniertes, forschungsbasiertes Anlagemanagement fur Marktzyklen, wirtschaftliche Veranderungen und wechselnde Kundenbedurfnisse.',
   'inv.why.pricing.title': 'Transparente Preisgestaltung',
   'inv.why.pricing.desc': 'Klare, gestaffelte Gebuhrenstrukturen ohne versteckte Kosten, ohne Transaktionsaufschlage und mit detaillierten vierteljährlichen Gebuhrenoffenlegungen, damit Sie immer genau wissen, was Sie bezahlen.',
   'inv.why.cta.title': 'Beginnen Sie Ihr Vermogen aufzubauen',
@@ -72,7 +72,7 @@ export const de = {
 
   'inv.philosophy.badge': 'Unser Ansatz',
   'inv.philosophy.title': 'Eine Philosophie basierend auf Uberzeugung',
-  'inv.philosophy.desc': 'Seit uber einem Jahrhundert helfen wir Generationen von Familien, ihr Vermogen aufzubauen und zu bewahren. Unsere Anlagephilosophie basiert auf Geduld, rigoroser Analyse und unerschutterlicher Disziplin -- Prinzipien, die sich in jedem Marktzyklus als widerstandsfahig erwiesen haben.',
+  'inv.philosophy.desc': 'Wir helfen Familien, ihr Vermogen mit Geduld, grundlicher Analyse und konsequenter Disziplin aufzubauen und zu bewahren -- Prinzipien fur jeden Marktzyklus.',
   'inv.philosophy.p1.title': 'Langfristige Wertschopfung',
   'inv.philosophy.p1.desc': 'Wir konzentrieren uns auf Fundamentalanalyse und identifizieren Chancen mit starkem inneren Wert, wobei nachhaltiges Wachstum Vorrang vor spekulativen kurzfristigen Gewinnen hat.',
   'inv.philosophy.p2.title': 'Diszipliniertes Risikomanagement',

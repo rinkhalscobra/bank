@@ -1,7 +1,7 @@
 export const en = {
   'inv.hero.badge': 'Wealth Management & Advisory',
   'inv.hero.title': 'Invest With Confidence',
-  'inv.hero.subtitle': 'Build, preserve, and grow your wealth with institutional-grade strategies, dedicated advisors, and over a century of fiduciary excellence.',
+  'inv.hero.subtitle': 'Build, preserve, and grow your wealth with institutional-grade strategies, dedicated advisors, and disciplined fiduciary guidance.',
   'inv.hero.cta1': 'Open Investment Account',
   'inv.hero.cta2': 'Speak With an Advisor',
 
@@ -58,7 +58,7 @@ export const en = {
   'inv.why.fiduciary.title': 'Fiduciary Commitment',
   'inv.why.fiduciary.desc': 'We are legally bound to act in your best interest. Every recommendation, every rebalance, and every strategy is designed with your goals -- not ours -- at the center.',
   'inv.why.track.title': 'Proven Track Record',
-  'inv.why.track.desc': 'Over 130 years of navigating market cycles, economic shifts, and generational wealth transitions with disciplined, research-driven investment management.',
+  'inv.why.track.desc': 'Disciplined, research-driven investment management designed to navigate market cycles, economic shifts, and changing client needs.',
   'inv.why.pricing.title': 'Transparent Pricing',
   'inv.why.pricing.desc': 'Clear, tiered fee structures with no hidden costs, no transaction markups, and detailed quarterly fee disclosures so you always know exactly what you are paying.',
   'inv.why.cta.title': 'Start Building Your Wealth',
@@ -72,7 +72,7 @@ export const en = {
 
   'inv.philosophy.badge': 'Our Approach',
   'inv.philosophy.title': 'A Philosophy Built on Conviction',
-  'inv.philosophy.desc': 'For over a century, we have helped generations of families grow and preserve their wealth. Our investment philosophy is rooted in patience, rigorous analysis, and unwavering discipline -- principles that have proven resilient through every market cycle.',
+  'inv.philosophy.desc': 'We help families grow and preserve their wealth through patience, rigorous analysis, and unwavering discipline -- principles designed to remain resilient through every market cycle.',
   'inv.philosophy.p1.title': 'Long-Term Value Creation',
   'inv.philosophy.p1.desc': 'We focus on fundamental analysis and identify opportunities with strong intrinsic value, prioritizing sustainable growth over speculative short-term gains.',
   'inv.philosophy.p2.title': 'Disciplined Risk Management',

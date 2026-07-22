@@ -1,7 +1,7 @@
 export const it = {
   'inv.hero.badge': 'Gestione patrimoniale e consulenza',
   'inv.hero.title': 'Investi con fiducia',
-  'inv.hero.subtitle': 'Costruisci, preserva e fai crescere il tuo patrimonio con strategie di livello istituzionale, consulenti dedicati e oltre un secolo di eccellenza fiduciaria.',
+  'inv.hero.subtitle': 'Costruisci, preserva e fai crescere il tuo patrimonio con strategie istituzionali, consulenti dedicati e una guida fiduciaria disciplinata.',
   'inv.hero.cta1': 'Apri un conto di investimento',
   'inv.hero.cta2': 'Parla con un consulente',
 
@@ -58,7 +58,7 @@ export const it = {
   'inv.why.fiduciary.title': 'Impegno fiduciario',
   'inv.why.fiduciary.desc': 'Siamo legalmente obbligati ad agire nel tuo miglior interesse. Ogni raccomandazione, ogni ribilanciamento e ogni strategia e progettata con i tuoi obiettivi -- non i nostri -- al centro.',
   'inv.why.track.title': 'Track record comprovato',
-  'inv.why.track.desc': 'Oltre 130 anni di navigazione attraverso cicli di mercato, cambiamenti economici e transizioni patrimoniali generazionali con una gestione degli investimenti disciplinata e basata sulla ricerca.',
+  'inv.why.track.desc': 'Una gestione degli investimenti disciplinata e basata sulla ricerca per affrontare cicli di mercato, cambiamenti economici e nuove esigenze dei clienti.',
   'inv.why.pricing.title': 'Prezzi trasparenti',
   'inv.why.pricing.desc': 'Strutture tariffarie chiare e scalonate senza costi nascosti, senza maggiorazioni sulle transazioni e con divulgazioni trimestrali dettagliate delle commissioni per sapere sempre esattamente quanto stai pagando.',
   'inv.why.cta.title': 'Inizia a costruire il tuo patrimonio',
@@ -72,7 +72,7 @@ export const it = {
 
   'inv.philosophy.badge': 'Il nostro approccio',
   'inv.philosophy.title': 'Una filosofia basata sulla convinzione',
-  'inv.philosophy.desc': 'Per oltre un secolo, abbiamo aiutato generazioni di famiglie a far crescere e preservare il proprio patrimonio. La nostra filosofia di investimento e radicata nella pazienza, nell\'analisi rigorosa e nella disciplina incrollabile -- principi che si sono dimostrati resilienti in ogni ciclo di mercato.',
+  'inv.philosophy.desc': 'Aiutiamo le famiglie a far crescere e preservare il patrimonio con pazienza, analisi rigorosa e disciplina -- principi pensati per ogni ciclo di mercato.',
   'inv.philosophy.p1.title': 'Creazione di valore a lungo termine',
   'inv.philosophy.p1.desc': 'Ci concentriamo sull\'analisi fondamentale e identifichiamo opportunita con forte valore intrinseco, dando priorita alla crescita sostenibile rispetto ai guadagni speculativi a breve termine.',
   'inv.philosophy.p2.title': 'Gestione disciplinata del rischio',
