@@ -240,8 +240,19 @@ const ID_TYPE_OPTIONS = ID_TYPES.map((type) => ({
   label: type.label,
 }));
 
+function getKycErrorMessage(error: unknown) {
+  if (error instanceof Error && error.message) return error.message;
+
+  if (error && typeof error === 'object' && 'message' in error) {
+    const message = (error as { message?: unknown }).message;
+    if (typeof message === 'string' && message.trim()) return message;
+  }
+
+  return 'Something went wrong. Please try again.';
+}
+
 export default function KycVerification() {
-  const { user, refreshKycStatus } = useAuth();
+  const { user, kycStatus, refreshKycStatus } = useAuth();
   const { branding } = useBranding();
   const navigate = useNavigate();
   const [step, setStep] = useState(0);
@@ -304,6 +315,19 @@ export default function KycVerification() {
     setError('');
     if (step === 0) {
       if (!dateOfBirth) { setError('Date of birth is required'); return false; }
+      const selectedBirthDate = new Date(`${dateOfBirth}T00:00:00`);
+      const latestAdultBirthDate = new Date();
+      const earliestBirthDate = new Date();
+      latestAdultBirthDate.setFullYear(latestAdultBirthDate.getFullYear() - 18);
+      earliestBirthDate.setFullYear(earliestBirthDate.getFullYear() - 120);
+      if (
+        Number.isNaN(selectedBirthDate.getTime()) ||
+        selectedBirthDate > latestAdultBirthDate ||
+        selectedBirthDate < earliestBirthDate
+      ) {
+        setError('Enter a valid date of birth for an account holder aged 18 or older');
+        return false;
+      }
       if (!nationality) { setError('Nationality is required'); return false; }
     } else if (step === 1) {
       if (!addressLine1.trim()) { setError('Address is required'); return false; }
@@ -346,7 +370,31 @@ export default function KycVerification() {
     let submissionCreated = false;
 
     try {
+      if (kycStatus === 'approved') {
+        navigate('/dashboard', { replace: true });
+        return;
+      }
+
+      if (kycStatus === 'submitted') {
+        navigate('/kyc-status', { replace: true });
+        return;
+      }
+
       const userId = user.id;
+      const { data: latestProfile, error: profileError } = await supabase
+        .from('profiles')
+        .select('kyc_status')
+        .eq('id', userId)
+        .single();
+
+      if (profileError) throw profileError;
+
+      if (latestProfile.kyc_status === 'approved' || latestProfile.kyc_status === 'submitted') {
+        await refreshKycStatus();
+        navigate(latestProfile.kyc_status === 'approved' ? '/dashboard' : '/kyc-status', { replace: true });
+        return;
+      }
+
       const timestamp = Date.now();
 
       let idFrontUrl = '';
@@ -392,8 +440,7 @@ export default function KycVerification() {
         await supabase.storage.from('kyc-documents').remove(uploadedPaths);
       }
 
-      const message = err instanceof Error ? err.message : 'Something went wrong. Please try again.';
-      setError(message);
+      setError(getKycErrorMessage(err));
     } finally {
       setSubmitting(false);
     }
