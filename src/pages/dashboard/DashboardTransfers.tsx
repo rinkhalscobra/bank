@@ -4,6 +4,7 @@ import {
   Building2,
   Clock,
   CheckCircle2,
+  RefreshCw,
   XCircle,
   ArrowUpRight,
   Download,
@@ -1031,6 +1032,14 @@ function StatusBadge({
     return (
       <span className="inline-flex items-center gap-1 text-[10px] font-medium text-[#006446]">
         <Clock className="w-3 h-3" /> {t('dashboardTransfers.status.pending')}
+      </span>
+    );
+  }
+
+  if (status === 'processing') {
+    return (
+      <span className="inline-flex items-center gap-1 text-[10px] font-medium text-amber-700">
+        <RefreshCw className="w-3 h-3" /> {t('dashboardTransfers.status.processing')}
       </span>
     );
   }

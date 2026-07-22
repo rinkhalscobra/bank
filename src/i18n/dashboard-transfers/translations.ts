@@ -14,6 +14,7 @@ registerTranslations({
     'dashboardTransfers.status.approved': 'Approved',
     'dashboardTransfers.status.completed': 'Completed',
     'dashboardTransfers.status.pending': 'Pending',
+    'dashboardTransfers.status.processing': 'Processing',
     'dashboardTransfers.status.failed': 'Failed',
 
     'dashboardTransfers.banking.internalTransfer': 'Internal Transfer',
@@ -68,6 +69,7 @@ registerTranslations({
     'dashboardTransfers.status.approved': 'Approuvé',
     'dashboardTransfers.status.completed': 'Terminé',
     'dashboardTransfers.status.pending': 'En attente',
+    'dashboardTransfers.status.processing': 'En cours',
     'dashboardTransfers.status.failed': 'Échoué',
 
     'dashboardTransfers.banking.internalTransfer': 'Virement interne',
@@ -122,6 +124,7 @@ registerTranslations({
     'dashboardTransfers.status.approved': 'Genehmigt',
     'dashboardTransfers.status.completed': 'Abgeschlossen',
     'dashboardTransfers.status.pending': 'Ausstehend',
+    'dashboardTransfers.status.processing': 'In Bearbeitung',
     'dashboardTransfers.status.failed': 'Fehlgeschlagen',
 
     'dashboardTransfers.banking.internalTransfer': 'Interne Überweisung',
@@ -176,6 +179,7 @@ registerTranslations({
     'dashboardTransfers.status.approved': 'Aprobada',
     'dashboardTransfers.status.completed': 'Completada',
     'dashboardTransfers.status.pending': 'Pendiente',
+    'dashboardTransfers.status.processing': 'En proceso',
     'dashboardTransfers.status.failed': 'Fallida',
 
     'dashboardTransfers.banking.internalTransfer': 'Transferencia interna',
@@ -230,6 +234,7 @@ registerTranslations({
     'dashboardTransfers.status.approved': 'Approvato',
     'dashboardTransfers.status.completed': 'Completato',
     'dashboardTransfers.status.pending': 'In attesa',
+    'dashboardTransfers.status.processing': 'In elaborazione',
     'dashboardTransfers.status.failed': 'Fallito',
 
     'dashboardTransfers.banking.internalTransfer': 'Trasferimento interno',
@@ -284,6 +289,7 @@ registerTranslations({
     'dashboardTransfers.status.approved': 'Εγκρίθηκε',
     'dashboardTransfers.status.completed': 'Ολοκληρώθηκε',
     'dashboardTransfers.status.pending': 'Σε εκκρεμότητα',
+    'dashboardTransfers.status.processing': 'Σε επεξεργασία',
     'dashboardTransfers.status.failed': 'Απέτυχε',
 
     'dashboardTransfers.banking.internalTransfer': 'Εσωτερική μεταφορά',

@@ -80,9 +80,9 @@ export default function DashboardAnalytics() {
   const frozenCards = cards.filter((c) => c.status === 'frozen').length;
 
   const bankTransferVolume = transfers.reduce((s, t) => s + t.amount, 0);
-  const bankTransferPending = transfers.filter((t) => t.status === 'pending').length;
+  const bankTransferPending = transfers.filter((t) => ['pending', 'processing'].includes(t.status)).length;
   const cryptoTransferVolume = cryptoTransfers.reduce((s, t) => s + t.amount, 0);
-  const cryptoTransferPending = cryptoTransfers.filter((t) => t.status === 'pending').length;
+  const cryptoTransferPending = cryptoTransfers.filter((t) => ['pending', 'processing'].includes(t.status)).length;
 
   const billsCompleted = billPayments.filter((b) => b.status === 'completed');
   const billsPending = billPayments.filter((b) => b.status === 'pending');

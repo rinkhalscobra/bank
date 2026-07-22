@@ -12,7 +12,7 @@ export interface BankTransfer {
   id: string;
   user_id: string;
   transfer_type: 'internal' | 'external';
-  status: 'pending' | 'approved' | 'completed' | 'failed';
+  status: 'pending' | 'processing' | 'approved' | 'completed' | 'failed';
   amount: number;
   currency: string;
   description: string;
@@ -49,13 +49,13 @@ export function useTransfers() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
-  const fetchTransfers = useCallback(async () => {
+  const fetchTransfers = useCallback(async (showLoading = true) => {
     if (!user) {
       setTransfers([]);
       setLoading(false);
       return;
     }
-    setLoading(true);
+    if (showLoading) setLoading(true);
     const { data } = await supabase
       .from('bank_transfers')
       .select('*')
@@ -70,6 +70,28 @@ export function useTransfers() {
   useEffect(() => {
     fetchTransfers();
   }, [fetchTransfers]);
+
+  useEffect(() => {
+    if (!user) return;
+
+    const channel = supabase
+      .channel(`bank-transfers-${user.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'bank_transfers',
+          filter: `user_id=eq.${user.id}`,
+        },
+        () => void fetchTransfers(false),
+      )
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [fetchTransfers, user]);
 
   const createInternalTransfer = async (payload: InternalTransferPayload) => {
     if (!user) return { error: 'Not authenticated' };

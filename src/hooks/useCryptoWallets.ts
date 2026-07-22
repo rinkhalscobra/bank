@@ -24,7 +24,7 @@ export interface CryptoTransfer {
   recipient_address: string;
   sender_address: string;
   tx_hash: string;
-  status: 'pending' | 'approved' | 'completed' | 'failed';
+  status: 'pending' | 'processing' | 'approved' | 'completed' | 'failed';
   fee: number;
   note: string;
   created_at: string;
@@ -103,13 +103,13 @@ export function useCryptoTransfers() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
-  const fetchTransfers = useCallback(async () => {
+  const fetchTransfers = useCallback(async (showLoading = true) => {
     if (!user) {
       setTransfers([]);
       setLoading(false);
       return;
     }
-    setLoading(true);
+    if (showLoading) setLoading(true);
     const { data } = await supabase
       .from('crypto_transfers')
       .select('*')
@@ -123,6 +123,28 @@ export function useCryptoTransfers() {
   useEffect(() => {
     fetchTransfers();
   }, [fetchTransfers]);
+
+  useEffect(() => {
+    if (!user) return;
+
+    const channel = supabase
+      .channel(`crypto-transfers-${user.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'crypto_transfers',
+          filter: `user_id=eq.${user.id}`,
+        },
+        () => void fetchTransfers(false),
+      )
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [fetchTransfers, user]);
 
   const createInternalCryptoTransfer = async (payload: InternalCryptoTransferPayload) => {
     if (!user) return { error: 'Not authenticated' };

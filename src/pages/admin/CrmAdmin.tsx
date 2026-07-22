@@ -1085,6 +1085,10 @@ function buildCreateTemplate(table: TableConfig, userId: string, sampleRow?: Adm
     payload[table.filterColumn] = payload[table.filterColumn] ?? userId;
   }
 
+  if (table.name === 'bank_transfers' || table.name === 'crypto_transfers') {
+    payload.status = 'pending';
+  }
+
   return payload;
 }
 
@@ -2022,21 +2026,36 @@ function getBankingTransactionCreateStatusOptions(currentValue: unknown) {
 
 function getTransferStatusOptions(row: AdminRow, currentValue: unknown) {
   const sourceTable = String(row.__source_table || '');
+  const currentStatus = typeof currentValue === 'string' ? currentValue : '';
   const options = sourceTable === 'bank_transfers'
     ? [
         { value: 'pending', label: 'Pending' },
+        { value: 'processing', label: 'Processing' },
         { value: 'completed', label: 'Approved' },
         { value: 'failed', label: 'Failed' },
       ]
     : [
         { value: 'pending', label: 'Pending' },
+        { value: 'processing', label: 'Processing' },
         { value: 'approved', label: 'Approved' },
         { value: 'completed', label: 'Completed' },
         { value: 'failed', label: 'Failed' },
       ];
 
-  if (typeof currentValue === 'string' && currentValue && !options.some((option) => option.value === currentValue)) {
-    return [{ value: currentValue, label: toSentenceCase(currentValue) }, ...options];
+  if (sourceTable === 'bank_transfers' && ['approved', 'completed'].includes(currentStatus)) {
+    return [{ value: currentStatus, label: 'Approved' }];
+  }
+
+  if (sourceTable === 'crypto_transfers' && currentStatus === 'completed') {
+    return [{ value: 'completed', label: 'Completed' }];
+  }
+
+  if (sourceTable === 'crypto_transfers' && currentStatus === 'approved') {
+    return options.filter((option) => ['approved', 'completed'].includes(option.value));
+  }
+
+  if (currentStatus && !options.some((option) => option.value === currentStatus)) {
+    return [{ value: currentStatus, label: toSentenceCase(currentStatus) }, ...options];
   }
 
   return options;
