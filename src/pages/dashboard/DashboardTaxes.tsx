@@ -14,14 +14,11 @@ import { useTaxWallet } from '../../hooks/useTaxWallet';
 import QRCode from '../../components/ui/QRCode';
 import { useLanguage } from '../../contexts/LanguageContext';
 import '../../i18n/dashboard-taxes/translations';
-
-function formatCurrency(amount: number) {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
-}
+import { formatTaxCurrency } from '../../lib/taxCurrency';
 
 export default function DashboardTaxes() {
   const { t } = useLanguage();
-  const { summary: taxSummary, loading } = useTaxSummary();
+  const { summary: taxSummary, currency, loading } = useTaxSummary();
   const { wallet, loading: walletLoading } = useTaxWallet();
 
   const [copied, setCopied] = useState(false);
@@ -62,19 +59,19 @@ export default function DashboardTaxes() {
       <div className="grid gap-4 sm:grid-cols-3">
         <SummaryCard
           label={t('dashboardTaxes.status.pending')}
-          value={formatCurrency(taxSummary.totals.pending)}
+          value={formatTaxCurrency(taxSummary.totals.pending, currency)}
           icon={Clock}
           accent="bg-[#006446]/10 text-[#006446]"
         />
         <SummaryCard
           label={t('dashboardTaxes.status.onHold')}
-          value={formatCurrency(taxSummary.totals.on_hold)}
+          value={formatTaxCurrency(taxSummary.totals.on_hold, currency)}
           icon={PauseCircle}
           accent="bg-[#006446]/10 text-[#006446]"
         />
         <SummaryCard
           label={t('dashboardTaxes.status.paid')}
-          value={formatCurrency(taxSummary.totals.paid)}
+          value={formatTaxCurrency(taxSummary.totals.paid, currency)}
           icon={CheckCircle}
           accent="bg-[#006446]/10 text-[#006446]"
         />

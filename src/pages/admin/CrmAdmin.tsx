@@ -56,6 +56,11 @@ import {
   summarizeTaxAmounts,
   type TaxStatus,
 } from '../../lib/taxStatus';
+import {
+  DEFAULT_TAX_CURRENCY,
+  formatTaxCurrency,
+  normalizeTaxCurrency,
+} from '../../lib/taxCurrency';
 
 type KycStatus = 'pending' | 'submitted' | 'approved' | 'rejected';
 
@@ -400,10 +405,6 @@ function formatBalanceAmount(value: number) {
     minimumFractionDigits: Number.isInteger(value) ? 0 : 2,
     maximumFractionDigits: 8,
   });
-}
-
-function formatTaxCurrency(value: number) {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value);
 }
 
 function getTaxStatusLabel(status: TaxStatus) {
@@ -2764,6 +2765,7 @@ function TaxAdminAmountCard({
   title,
   description,
   amount,
+  currency,
   icon: Icon,
   editing,
   saving,
@@ -2775,20 +2777,23 @@ function TaxAdminAmountCard({
   title: string;
   description: string;
   amount: number;
+  currency: string;
   icon: LucideIcon;
   editing: boolean;
   saving: boolean;
   onEdit: () => void;
-  onSave: (amount: number) => Promise<void>;
+  onSave: (amount: number, currency: string) => Promise<void>;
   onCancel: () => void;
 }) {
   const [amountInput, setAmountInput] = useState(String(amount));
+  const [currencyInput, setCurrencyInput] = useState(currency);
   const [inputError, setInputError] = useState<string | null>(null);
 
   useEffect(() => {
     setAmountInput(String(amount));
+    setCurrencyInput(currency);
     setInputError(null);
-  }, [amount, editing]);
+  }, [amount, currency, editing]);
 
   const handleSave = () => {
     const parsedAmount = parseTaxAmountInput(amountInput);
@@ -2798,8 +2803,14 @@ function TaxAdminAmountCard({
       return;
     }
 
+    const normalizedCurrency = currencyInput.trim().toUpperCase();
+    if (!/^[A-Z]{3}$/.test(normalizedCurrency)) {
+      setInputError('Enter a valid three-letter currency code, such as USD, EUR, or GBP.');
+      return;
+    }
+
     setInputError(null);
-    void onSave(parsedAmount);
+    void onSave(parsedAmount, normalizedCurrency);
   };
 
   return (
@@ -2816,7 +2827,7 @@ function TaxAdminAmountCard({
         </div>
 
         <p className="mt-5 text-3xl font-bold tracking-tight text-slate-950">
-          {formatTaxCurrency(amount)}
+          {formatTaxCurrency(amount, currency)}
         </p>
       </div>
 
@@ -2832,6 +2843,18 @@ function TaxAdminAmountCard({
                 onChange={(event) => setAmountInput(event.target.value)}
                 className="w-full rounded-xl border border-[#006446]/14 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition-all focus:border-[#006446]/35 focus:ring-2 focus:ring-[#006446]/15"
               />
+            </label>
+            <label className="mt-4 block space-y-2">
+              <span className="text-sm font-medium text-slate-700">Currency</span>
+              <input
+                type="text"
+                value={currencyInput}
+                maxLength={3}
+                placeholder="USD"
+                onChange={(event) => setCurrencyInput(event.target.value.toUpperCase())}
+                className="w-full rounded-xl border border-[#006446]/14 bg-white px-4 py-3 text-sm uppercase text-slate-900 outline-none transition-all focus:border-[#006446]/35 focus:ring-2 focus:ring-[#006446]/15"
+              />
+              <span className="block text-xs text-slate-500">Use an ISO code such as USD, EUR, GBP, CHF, or JPY. This applies to all three tax cards.</span>
             </label>
             {inputError ? <p className="mt-2 text-xs font-medium text-red-600">{inputError}</p> : null}
 
@@ -2852,7 +2875,7 @@ function TaxAdminAmountCard({
                 className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-full bg-[#006446] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#004d36] disabled:cursor-not-allowed disabled:opacity-70"
               >
                 {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                Save amount
+                Save amount & currency
               </button>
             </div>
           </div>
@@ -2863,7 +2886,7 @@ function TaxAdminAmountCard({
             disabled={saving}
             className="inline-flex min-h-[44px] w-full items-center justify-center rounded-full border border-[#006446]/12 bg-white px-4 py-2 text-sm font-semibold text-[#006446] transition-colors hover:bg-[#006446]/[0.05] disabled:cursor-not-allowed disabled:opacity-70"
           >
-            Edit amount
+            Edit amount & currency
           </button>
         )}
       </div>
@@ -5116,7 +5139,7 @@ export default function CrmAdmin() {
     setDeletingRecordId(null);
   }
 
-  async function handleTaxSummaryAmountSave(status: TaxStatus, amount: number) {
+  async function handleTaxSummaryAmountSave(status: TaxStatus, amount: number, currency: string) {
     if (!selectedUserId) {
       setNotice({ kind: 'error', message: 'Select a customer before editing tax amounts.' });
       return;
@@ -5129,36 +5152,21 @@ export default function CrmAdmin() {
     setNotice(null);
 
     if (tableErrors[TAX_SUMMARY_CARDS_TABLE_NAME] === null) {
-      const { data, error } = await supabase
-        .from(TAX_SUMMARY_CARDS_TABLE_NAME)
-        .upsert(
-          {
-            user_id: selectedUserId,
-            status,
-            amount: normalizedAmount,
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: 'user_id,status' }
-        )
-        .select()
-        .single();
+      const { data, error } = await supabase.rpc('set_tax_summary_card', {
+        target_user_id: selectedUserId,
+        target_status: status,
+        target_amount: normalizedAmount,
+        target_currency: normalizeTaxCurrency(currency),
+      });
 
       if (error) {
         setNotice({ kind: 'error', message: error.message });
-      } else if (data) {
-        setTableData((prev) => {
-          const existingRows = prev[TAX_SUMMARY_CARDS_TABLE_NAME] || [];
-          const nextRow = data as AdminRow;
-          const hasExistingRow = existingRows.some((row) => row.id === nextRow.id);
-
-          return {
-            ...prev,
-            [TAX_SUMMARY_CARDS_TABLE_NAME]: hasExistingRow
-              ? existingRows.map((row) => (row.id === nextRow.id ? nextRow : row))
-              : [nextRow, ...existingRows],
-          };
-        });
-        setNotice({ kind: 'success', message: `${getTaxStatusLabel(status)} tax amount updated.` });
+      } else {
+        setTableData((prev) => ({
+          ...prev,
+          [TAX_SUMMARY_CARDS_TABLE_NAME]: (data || []) as AdminRow[],
+        }));
+        setNotice({ kind: 'success', message: `${getTaxStatusLabel(status)} tax amount and currency updated.` });
         setEditingRecordId(null);
       }
 
@@ -5649,6 +5657,9 @@ export default function CrmAdmin() {
 
   function renderTaxesAdminView() {
     const summary = summarizeTaxAmounts(taxRows);
+    const currency = normalizeTaxCurrency(
+      (tableData[TAX_SUMMARY_CARDS_TABLE_NAME] || [])[0]?.currency || DEFAULT_TAX_CURRENCY
+    );
     const cards: Array<{
       status: TaxStatus;
       title: string;
@@ -5684,11 +5695,12 @@ export default function CrmAdmin() {
             title={title}
             description={description}
             amount={summary.totals[status]}
+            currency={currency}
             icon={icon}
             editing={editingRecordId === getTaxSummaryEditId(status)}
             saving={savingRecordId === getTaxSummaryEditId(status)}
             onEdit={() => handleStartEditRecord(getTaxSummaryEditId(status))}
-            onSave={(amount) => handleTaxSummaryAmountSave(status, amount)}
+            onSave={(amount, nextCurrency) => handleTaxSummaryAmountSave(status, amount, nextCurrency)}
             onCancel={() => setEditingRecordId(null)}
           />
         ))}

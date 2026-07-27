@@ -37,6 +37,7 @@ import {
   getLocalizedRestrictedBalanceCountMessage,
 } from '../../lib/balanceStatusI18n';
 import '../../i18n/dashboardOverview/translations';
+import { formatTaxCurrency } from '../../lib/taxCurrency';
 
 const CURRENCY_CONFIG: Record<string, { symbol: string; locale: string }> = {
   USD: { symbol: 'USD', locale: 'en-US' },
@@ -141,7 +142,7 @@ export default function DashboardOverview() {
   const { fiatBalances, loading: fiatLoading } = useFiatBalances();
   const { transactions, loading: txLoading } = useTransactions();
   const { cryptoBalances, loading: cryptoLoading } = useCryptoBalances();
-  const { summary: taxSummary, loading: taxLoading } = useTaxSummary();
+  const { summary: taxSummary, currency: taxCurrency, loading: taxLoading } = useTaxSummary();
   const { t, language } = useLanguage();
   const [showBalances, setShowBalances] = useState(true);
   const [ibanCopied, setIbanCopied] = useState(false);
@@ -406,7 +407,7 @@ export default function DashboardOverview() {
               </p>
             </div>
             <p className="text-xl font-bold text-slate-900">
-              {showBalances ? formatCurrency(taxSummary.totals.pending) : '****'}
+              {showBalances ? formatTaxCurrency(taxSummary.totals.pending, taxCurrency) : '****'}
             </p>
           </div>
 
@@ -418,7 +419,7 @@ export default function DashboardOverview() {
               </p>
             </div>
             <p className="text-xl font-bold text-slate-900">
-              {showBalances ? formatCurrency(taxSummary.totals.on_hold) : '****'}
+              {showBalances ? formatTaxCurrency(taxSummary.totals.on_hold, taxCurrency) : '****'}
             </p>
           </div>
 
@@ -430,7 +431,7 @@ export default function DashboardOverview() {
               </p>
             </div>
             <p className="text-xl font-bold text-slate-900">
-              {showBalances ? formatCurrency(taxSummary.totals.paid) : '****'}
+              {showBalances ? formatTaxCurrency(taxSummary.totals.paid, taxCurrency) : '****'}
             </p>
           </div>
         </div>
