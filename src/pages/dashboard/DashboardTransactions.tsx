@@ -144,6 +144,14 @@ function parseFiatAmountFromText(value: string) {
   return null;
 }
 
+function parseStandaloneFiatAmount(value: string | undefined) {
+  const text = value?.trim();
+  if (!text || !/^[+-]?\d[\d\s,.]*$/.test(text)) return null;
+
+  const amount = normalizeAmountNumber(text);
+  return Number.isFinite(amount) ? amount : null;
+}
+
 function getFiatTransactionAmount(tx: Transaction) {
   const numericAmount = Number(tx.amount);
   const currency = normalizeFiatCurrency(String((tx as Transaction & { currency?: string }).currency || '')) || 'USD';
@@ -167,6 +175,24 @@ function getFiatTransactionAmount(tx: Transaction) {
       hasAmount: true,
       signed: `${parsed.amount < 0 ? '-' : isBankingInflow(tx.type) ? '+' : '-'}${formatCurrencyByCode(Math.abs(parsed.amount), parsedCurrency)}`,
       plain: formatCurrencyByCode(Math.abs(parsed.amount), parsedCurrency),
+    };
+  }
+
+  // The current transactions schema stores legacy/admin-entered amounts in
+  // `details`. Only accept a field that consists entirely of a number so an
+  // order/reference number embedded in descriptive text is never mistaken for
+  // a transaction amount.
+  const standaloneAmount = [tx.details, tx.description, tx.comment]
+    .map(parseStandaloneFiatAmount)
+    .find((amount): amount is number => amount !== null);
+
+  if (standaloneAmount !== undefined) {
+    return {
+      amount: Math.abs(standaloneAmount),
+      currency,
+      hasAmount: true,
+      signed: `${standaloneAmount < 0 ? '-' : isBankingInflow(tx.type) ? '+' : '-'}${formatCurrencyByCode(Math.abs(standaloneAmount), currency)}`,
+      plain: formatCurrencyByCode(Math.abs(standaloneAmount), currency),
     };
   }
 
