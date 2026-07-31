@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { useTransactions, type Transaction } from '../../hooks/useBankingData';
 import { useCryptoTransactions, type CryptoTransaction } from '../../hooks/useCryptoTransactions';
+import { useFiatBalances } from '../../hooks/useFiatBalances';
 import Dropdown from '../../components/ui/Dropdown';
 import {
   getBrandFileSlug,
@@ -152,9 +153,12 @@ function parseStandaloneFiatAmount(value: string | undefined) {
   return Number.isFinite(amount) ? amount : null;
 }
 
-function getFiatTransactionAmount(tx: Transaction) {
+function getFiatTransactionAmount(tx: Transaction, balanceCurrency = 'USD') {
   const numericAmount = Number(tx.amount);
-  const currency = normalizeFiatCurrency(String((tx as Transaction & { currency?: string }).currency || '')) || 'USD';
+  const currency =
+    normalizeFiatCurrency(String((tx as Transaction & { currency?: string }).currency || '')) ||
+    normalizeFiatCurrency(balanceCurrency) ||
+    'USD';
 
   if (Number.isFinite(numericAmount) && Math.abs(numericAmount) > 0.000001) {
     return {
@@ -221,9 +225,13 @@ function getCryptoTransactionNotes(tx: CryptoTransaction) {
   return tx.comment || tx.description || 'Official crypto transaction confirmation generated for customer records.';
 }
 
-function buildFiatTransactionInvoice(tx: Transaction, formatDate: (dateStr: string) => string): TransactionInvoice {
+function buildFiatTransactionInvoice(
+  tx: Transaction,
+  formatDate: (dateStr: string) => string,
+  balanceCurrency: string,
+): TransactionInvoice {
   const reference = tx.reference_number || tx.poi || tx.id;
-  const resolvedAmount = getFiatTransactionAmount(tx);
+  const resolvedAmount = getFiatTransactionAmount(tx, balanceCurrency);
 
   return {
     title: getFiatTransactionTitle(tx),
@@ -393,7 +401,12 @@ export default function DashboardTransactions() {
   const [cryptoSearch, setCryptoSearch] = useState('');
 
   const { transactions: fiatTransactions, loading: fiatLoading } = useTransactions();
+  const { fiatBalances, loading: fiatBalancesLoading } = useFiatBalances();
   const { transactions: cryptoTransactions, loading: cryptoLoading } = useCryptoTransactions();
+  const fundedFiatCurrency =
+    fiatBalances.find((balance) => Number.isFinite(balance.balance) && Math.abs(balance.balance) > 0.000001)?.currency ||
+    fiatBalances[0]?.currency ||
+    'USD';
 
   const formatDate = formatDayMonthYear;
 
@@ -514,7 +527,8 @@ export default function DashboardTransactions() {
           selectedStatus={selectedStatus}
           setSelectedStatus={setSelectedStatus}
           filtered={filteredFiat}
-          loading={fiatLoading}
+          loading={fiatLoading || fiatBalancesLoading}
+          balanceCurrency={fundedFiatCurrency}
           fiatTypeOptions={fiatTypeOptions}
           fiatStatusOptions={fiatStatusOptions}
         />
@@ -654,16 +668,18 @@ function FiatTransactionDetailModal({
   branding,
   formatDate,
   transaction,
+  balanceCurrency,
   onClose,
 }: {
   t: (key: string) => string;
   branding: BrandingSettings;
   formatDate: (dateStr: string) => string;
   transaction: Transaction;
+  balanceCurrency: string;
   onClose: () => void;
 }) {
   const inflow = isBankingInflow(transaction.type);
-  const resolvedAmount = getFiatTransactionAmount(transaction);
+  const resolvedAmount = getFiatTransactionAmount(transaction, balanceCurrency);
   const amount = resolvedAmount.signed;
   const title = getFiatTransactionTitle(transaction);
 
@@ -672,7 +688,7 @@ function FiatTransactionDetailModal({
       title={title}
       subtitle={`${toSentenceCase(transaction.type)} transaction - ${formatDate(transaction.created_at)}`}
       onClose={onClose}
-      onDownloadInvoice={() => downloadTransactionInvoice(buildFiatTransactionInvoice(transaction, formatDate), branding)}
+      onDownloadInvoice={() => downloadTransactionInvoice(buildFiatTransactionInvoice(transaction, formatDate, balanceCurrency), branding)}
       invoiceAvailable={(transaction.status || 'completed') === 'completed'}
     >
       <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-[#006446]/10 bg-white px-4 py-3">
@@ -770,6 +786,7 @@ function FiatTransactionsView({
   setSelectedStatus,
   filtered,
   loading,
+  balanceCurrency,
   fiatTypeOptions,
   fiatStatusOptions,
 }: {
@@ -784,6 +801,7 @@ function FiatTransactionsView({
   setSelectedStatus: (v: string) => void;
   filtered: Transaction[];
   loading: boolean;
+  balanceCurrency: string;
   fiatTypeOptions: { value: string; label: string }[];
   fiatStatusOptions: { value: string; label: string }[];
 }) {
@@ -889,6 +907,7 @@ function FiatTransactionsView({
           branding={branding}
           formatDate={formatDate}
           transaction={selectedTransaction}
+          balanceCurrency={balanceCurrency}
           onClose={() => setSelectedTransaction(null)}
         />
       )}
