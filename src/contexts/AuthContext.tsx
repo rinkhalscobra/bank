@@ -91,6 +91,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [user, fetchProfileState]);
 
+  const ensureDefaultFiatBalances = useCallback(async (userId: string) => {
+    const { error: rpcError } = await supabase.rpc('ensure_default_fiat_balances');
+
+    if (!rpcError) return;
+
+    // Keep login self-healing while a new database migration is still being deployed.
+    // The unique (user_id, currency) constraint makes this safe on every session.
+    const { error: insertError } = await supabase
+      .from('fiat_balances')
+      .upsert([
+        { user_id: userId, currency: 'USD', name: 'US Dollar', balance: 0, status: 'available', display_order: 0 },
+        { user_id: userId, currency: 'EUR', name: 'Euro', balance: 0, status: 'available', display_order: 1 },
+        { user_id: userId, currency: 'CAD', name: 'Canadian Dollar', balance: 0, status: 'available', display_order: 2 },
+        { user_id: userId, currency: 'CHF', name: 'Swiss Franc', balance: 0, status: 'available', display_order: 3 },
+      ], {
+        onConflict: 'user_id,currency',
+        ignoreDuplicates: true,
+      });
+
+    if (insertError) {
+      console.error('Unable to ensure default fiat balances:', insertError.message);
+    }
+  }, []);
+
   useEffect(() => {
     let active = true;
     let authEventVersion = 0;
@@ -123,7 +147,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setLoading(true);
       }
 
-      void fetchProfileState(nextSession.user.id).finally(() => {
+      void Promise.all([
+        fetchProfileState(nextSession.user.id),
+        ensureDefaultFiatBalances(nextSession.user.id),
+      ]).finally(() => {
         if (active) setLoading(false);
       });
     };
@@ -172,7 +199,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       active = false;
       subscription.unsubscribe();
     };
-  }, [fetchProfileState]);
+  }, [ensureDefaultFiatBalances, fetchProfileState]);
 
   const signUp = async (email: string, password: string, fullName: string) => {
     const { error } = await supabase.auth.signUp({

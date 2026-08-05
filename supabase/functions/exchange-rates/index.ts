@@ -153,20 +153,26 @@ async function loadCryptoPrices(requestedSymbols: string[]): Promise<CryptoResul
   }
 
   const query = new URLSearchParams({
+    vs_currency: "usd",
     symbols: validSymbols.map((symbol) => symbol.toLowerCase()).join(","),
-    vs_currencies: "usd",
-    include_24hr_change: "true",
+    price_change_percentage: "24h",
+    order: "market_cap_desc",
+    per_page: String(Math.min(Math.max(validSymbols.length * 3, 50), 250)),
+    page: "1",
+    sparkline: "false",
   });
-  const data = await fetchJson(`${COINGECKO_BASE_URL}/simple/price?${query}`);
+  const data = await fetchJson(`${COINGECKO_BASE_URL}/coins/markets?${query}`);
   const prices: Record<string, { usd: number; usd_24h_change: number }> = {};
 
-  for (const symbol of validSymbols) {
-    const quote = data?.[symbol.toLowerCase()];
-    const usd = Number(quote?.usd);
-    if (usd > 0) {
+  // CoinGecko can return multiple assets with the same ticker. Results are ordered
+  // by market cap, so retain the first (most established) match for each symbol.
+  for (const quote of Array.isArray(data) ? data : []) {
+    const symbol = String(quote?.symbol || "").toUpperCase();
+    const usd = Number(quote?.current_price);
+    if (validSymbols.includes(symbol) && !prices[symbol] && usd > 0) {
       prices[symbol] = {
         usd,
-        usd_24h_change: Number(quote?.usd_24h_change) || 0,
+        usd_24h_change: Number(quote?.price_change_percentage_24h) || 0,
       };
     }
   }
