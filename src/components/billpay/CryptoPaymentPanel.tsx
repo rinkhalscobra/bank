@@ -2,23 +2,12 @@ import { useState } from 'react';
 import { Copy, Check, ChevronDown } from 'lucide-react';
 import { CryptoWallet } from '../../hooks/useCryptoWallets';
 import QRCode from '../ui/QRCode';
+import { buildCryptoPaymentUri } from '../../lib/cryptoPaymentUri';
 
 const TOKEN_BADGE_STYLE = {
   backgroundColor: 'rgba(0, 100, 70, 0.12)',
   color: '#006446',
 };
-
-function getPaymentUri(symbol: string, address: string): string {
-  switch (symbol) {
-    case 'BTC': return `bitcoin:${address}`;
-    case 'ETH': return `ethereum:${address}`;
-    case 'SOL': return `solana:${address}`;
-    case 'DOGE': return `dogecoin:${address}`;
-    case 'USDT': return address;
-    case 'USDC': return address;
-    default: return address;
-  }
-}
 
 interface CryptoPaymentPanelProps {
   wallets: CryptoWallet[];
@@ -126,7 +115,15 @@ export default function CryptoPaymentPanel({
           <div className="flex flex-col sm:flex-row gap-6 items-center sm:items-start">
             <div className="flex-shrink-0 rounded-2xl border border-[#006446]/14 bg-white p-2 shadow-[0_24px_60px_-48px_rgba(0,100,70,0.45)]">
               <QRCode
-                data={getPaymentUri(selectedWallet.symbol, selectedWallet.wallet_address)}
+                data={buildCryptoPaymentUri({
+                  address: selectedWallet.wallet_address,
+                  symbol: selectedWallet.symbol,
+                  network: selectedWallet.network,
+                  chainId: selectedWallet.chain_id,
+                  tokenContract: selectedWallet.token_contract,
+                  tokenDecimals: selectedWallet.token_decimals,
+                  paymentUriScheme: selectedWallet.payment_uri_scheme,
+                })}
                 size={160}
               />
             </div>

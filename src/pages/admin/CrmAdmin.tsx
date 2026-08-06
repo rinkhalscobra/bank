@@ -1080,6 +1080,30 @@ function buildCreateTemplate(table: TableConfig, userId: string, sampleRow?: Adm
         reference_number: '',
         notes: '',
       }
+    : table.name === 'crypto_wallets'
+    ? {
+        user_id: userId,
+        symbol: '',
+        name: '',
+        wallet_address: '',
+        network: '',
+        chain_id: '',
+        token_contract: '',
+        token_decimals: null,
+        payment_uri_scheme: '',
+      }
+    : table.name === 'tax_wallet_addresses'
+    ? {
+        user_id: userId,
+        symbol: '',
+        network: '',
+        wallet_address: '',
+        label: 'Tax Payment Wallet',
+        chain_id: '',
+        token_contract: '',
+        token_decimals: null,
+        payment_uri_scheme: '',
+      }
     : {};
 
   if (table.scope === 'user' && table.filterColumn && userId) {
@@ -3516,6 +3540,11 @@ function WalletCreateCard({
             {isCryptoSource
               ? 'Creates a row in `crypto_wallets`.'
               : 'Creates a row in `tax_wallet_addresses`.'}
+          </p>
+          <p className="mt-2 text-xs leading-relaxed text-slate-500">
+            Set `symbol`, `network`, and `wallet_address`. For EVM tokens you can also set
+            `chain_id`, `token_contract`, and `token_decimals`; use `payment_uri_scheme` only
+            when the wallet has a registered custom URI scheme. Unknown formats safely use the raw address QR.
           </p>
         </div>
 

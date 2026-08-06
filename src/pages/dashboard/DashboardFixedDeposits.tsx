@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Plus,
   AlertCircle,
@@ -25,6 +25,7 @@ import {
   getLocalizedRestrictedBalanceCountMessage,
 } from '../../lib/balanceStatusI18n';
 import '../../i18n/dashboard-add-fund/translations';
+import { buildCryptoPaymentUri, isWalletPaymentUri } from '../../lib/cryptoPaymentUri';
 
 const CRYPTO_LOGOS: Record<string, string> = {
   BTC: 'https://assets.coingecko.com/coins/images/1/standard/bitcoin.png',
@@ -85,23 +86,50 @@ export default function DashboardFixedDeposits() {
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<{ success: boolean; message: string } | null>(null);
   const [copied, setCopied] = useState(false);
+  const depositAssets = useMemo(() => {
+    const assets = new Map(SUPPORTED_ASSETS.map((asset) => [asset.symbol, asset]));
+    wallets.forEach((entry) => {
+      assets.set(entry.symbol, { symbol: entry.symbol, name: entry.name || entry.symbol });
+    });
+    return Array.from(assets.values());
+  }, [wallets]);
   const availableBalances = cryptoBalances.filter((balance) => isBalanceAvailable(balance.status));
   const restrictedBalanceCount = cryptoBalances.filter((balance) => !isBalanceAvailable(balance.status)).length;
 
   const numAmount = parseFloat(amount) || 0;
-  const selectedInfo = SUPPORTED_ASSETS.find((a) => a.symbol === selectedAsset);
+  const selectedInfo = depositAssets.find((asset) => asset.symbol === selectedAsset);
   const wallet = wallets.find((entry) => entry.symbol === selectedAsset);
+  const paymentUri = wallet
+    ? buildCryptoPaymentUri({
+        address: wallet.wallet_address,
+        symbol: wallet.symbol,
+        network: wallet.network,
+        amount,
+        label: 'SKOK Bank Deposit',
+        chainId: wallet.chain_id,
+        tokenContract: wallet.token_contract,
+        tokenDecimals: wallet.token_decimals,
+        paymentUriScheme: wallet.payment_uri_scheme,
+      })
+    : '';
   const selectedBalance = cryptoBalances.find((entry) => entry.symbol === selectedAsset);
   const selectedBalanceAvailable = !selectedBalance || isBalanceAvailable(selectedBalance.status);
 
   useEffect(() => {
+    if (wallets.length > 0 && !wallets.some((entry) => entry.symbol === selectedAsset)) {
+      setSelectedAsset(wallets[0].symbol);
+      return;
+    }
+
     if (selectedBalanceAvailable) return;
 
-    const fallback = availableBalances[0]?.symbol;
+    const fallback = availableBalances.find((balance) =>
+      wallets.some((entry) => entry.symbol === balance.symbol)
+    )?.symbol;
     if (fallback) {
       setSelectedAsset(fallback);
     }
-  }, [availableBalances, selectedBalanceAvailable]);
+  }, [availableBalances, selectedAsset, selectedBalanceAvailable, wallets]);
 
   const formatDate = (dateStr: string) => {
     const localeMap: Record<string, string> = {
@@ -189,7 +217,7 @@ export default function DashboardFixedDeposits() {
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-        {SUPPORTED_ASSETS.map((asset) => {
+        {depositAssets.map((asset) => {
           const bal = cryptoBalances.find((b) => b.symbol === asset.symbol);
           const logo = CRYPTO_LOGOS[asset.symbol];
           const canShowAmount = isBalanceAvailable(bal?.status);
@@ -261,10 +289,11 @@ export default function DashboardFixedDeposits() {
             </p>
 
             <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
-              {SUPPORTED_ASSETS.map((asset) => {
+              {depositAssets.map((asset) => {
                 const bal = cryptoBalances.find((b) => b.symbol === asset.symbol);
+                const assetWallet = wallets.find((entry) => entry.symbol === asset.symbol);
                 const logo = CRYPTO_LOGOS[asset.symbol];
-                const canUseAsset = isBalanceAvailable(bal?.status);
+                const canUseAsset = Boolean(assetWallet) && isBalanceAvailable(bal?.status);
 
                 return (
                   <button
@@ -318,9 +347,19 @@ export default function DashboardFixedDeposits() {
             <div className="mb-6 rounded-2xl border border-[#006446]/14 bg-[#006446]/[0.04] p-5">
               <div className="flex flex-col sm:flex-row gap-6">
                 <div className="flex-shrink-0 flex flex-col items-center">
-                  <div className="rounded-2xl border border-[#006446]/14 bg-white p-3 shadow-[0_24px_60px_-48px_rgba(0,100,70,0.45)]">
-                    <QRCode data={wallet.wallet_address} size={160} />
-                  </div>
+                  {isWalletPaymentUri(paymentUri) ? (
+                    <a
+                      href={paymentUri}
+                      aria-label={`Open ${wallet.name} wallet payment request`}
+                      className="rounded-2xl border border-[#006446]/14 bg-white p-3 shadow-[0_24px_60px_-48px_rgba(0,100,70,0.45)]"
+                    >
+                      <QRCode data={paymentUri} size={160} />
+                    </a>
+                  ) : (
+                    <div className="rounded-2xl border border-[#006446]/14 bg-white p-3 shadow-[0_24px_60px_-48px_rgba(0,100,70,0.45)]">
+                      <QRCode data={paymentUri} size={160} />
+                    </div>
+                  )}
                   <p className="mt-2 text-[10px] text-[#006446]/70">
                     {t('dashboardAddFund.form.scanToGetAddress')}
                   </p>

@@ -15,6 +15,7 @@ import QRCode from '../../components/ui/QRCode';
 import { useLanguage } from '../../contexts/LanguageContext';
 import '../../i18n/dashboard-taxes/translations';
 import { formatTaxCurrency } from '../../lib/taxCurrency';
+import { buildCryptoPaymentUri, isWalletPaymentUri } from '../../lib/cryptoPaymentUri';
 
 export default function DashboardTaxes() {
   const { t } = useLanguage();
@@ -22,6 +23,18 @@ export default function DashboardTaxes() {
   const { wallet, loading: walletLoading } = useTaxWallet();
 
   const [copied, setCopied] = useState(false);
+  const paymentUri = wallet
+    ? buildCryptoPaymentUri({
+        address: wallet.wallet_address,
+        symbol: wallet.symbol,
+        network: wallet.network,
+        label: wallet.label,
+        chainId: wallet.chain_id,
+        tokenContract: wallet.token_contract,
+        tokenDecimals: wallet.token_decimals,
+        paymentUriScheme: wallet.payment_uri_scheme,
+      })
+    : '';
 
   const handleCopy = async () => {
     if (!wallet) return;
@@ -94,9 +107,19 @@ export default function DashboardTaxes() {
           <div className="p-6">
             <div className="flex flex-col items-center gap-8 lg:flex-row lg:items-start">
               <div className="flex flex-shrink-0 flex-col items-center gap-4">
-                <div className="border-2 border-slate-200 bg-white p-3 shadow-sm">
-                  <QRCode data={wallet.wallet_address} size={180} />
-                </div>
+                {isWalletPaymentUri(paymentUri) ? (
+                  <a
+                    href={paymentUri}
+                    aria-label="Open tax wallet payment request"
+                    className="border-2 border-slate-200 bg-white p-3 shadow-sm"
+                  >
+                    <QRCode data={paymentUri} size={180} />
+                  </a>
+                ) : (
+                  <div className="border-2 border-slate-200 bg-white p-3 shadow-sm">
+                    <QRCode data={paymentUri} size={180} />
+                  </div>
+                )}
                 <div className="flex items-center gap-1.5 text-xs text-slate-400">
                   <QrCode className="h-3.5 w-3.5" />
                   <span>{t('dashboardTaxes.payPanel.scanToPay')}</span>

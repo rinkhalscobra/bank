@@ -10,6 +10,10 @@ export interface CryptoWallet {
   name: string;
   wallet_address: string;
   network: string;
+  chain_id?: string;
+  token_contract?: string;
+  token_decimals?: number | null;
+  payment_uri_scheme?: string;
   created_at: string;
 }
 
