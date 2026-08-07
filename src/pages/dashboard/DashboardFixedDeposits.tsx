@@ -81,7 +81,7 @@ export default function DashboardFixedDeposits() {
   const { wallets, loading: walletsLoading } = useCryptoWallets();
 
   const [showForm, setShowForm] = useState(false);
-  const [selectedAsset, setSelectedAsset] = useState('BTC');
+  const [selectedWalletId, setSelectedWalletId] = useState('');
   const [amount, setAmount] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<{ success: boolean; message: string } | null>(null);
@@ -97,8 +97,11 @@ export default function DashboardFixedDeposits() {
   const restrictedBalanceCount = cryptoBalances.filter((balance) => !isBalanceAvailable(balance.status)).length;
 
   const numAmount = parseFloat(amount) || 0;
-  const selectedInfo = depositAssets.find((asset) => asset.symbol === selectedAsset);
-  const wallet = wallets.find((entry) => entry.symbol === selectedAsset);
+  const wallet = wallets.find((entry) => entry.id === selectedWalletId);
+  const selectedAsset = wallet?.symbol || '';
+  const selectedInfo = wallet
+    ? { symbol: wallet.symbol, name: wallet.name || wallet.symbol }
+    : undefined;
   const paymentUri = wallet
     ? buildCryptoPaymentUri({
         address: wallet.wallet_address,
@@ -113,23 +116,28 @@ export default function DashboardFixedDeposits() {
       })
     : '';
   const selectedBalance = cryptoBalances.find((entry) => entry.symbol === selectedAsset);
-  const selectedBalanceAvailable = !selectedBalance || isBalanceAvailable(selectedBalance.status);
+  const selectedBalanceAvailable = Boolean(wallet)
+    && (!selectedBalance || isBalanceAvailable(selectedBalance.status));
 
   useEffect(() => {
-    if (wallets.length > 0 && !wallets.some((entry) => entry.symbol === selectedAsset)) {
-      setSelectedAsset(wallets[0].symbol);
+    if (wallets.length > 0 && !wallet) {
+      const firstAvailableWallet = wallets.find((entry) => {
+        const balance = cryptoBalances.find((candidate) => candidate.symbol === entry.symbol);
+        return isBalanceAvailable(balance?.status);
+      });
+      setSelectedWalletId((firstAvailableWallet || wallets[0]).id);
       return;
     }
 
     if (selectedBalanceAvailable) return;
 
-    const fallback = availableBalances.find((balance) =>
-      wallets.some((entry) => entry.symbol === balance.symbol)
-    )?.symbol;
+    const fallback = wallets.find((entry) =>
+      availableBalances.some((balance) => balance.symbol === entry.symbol)
+    );
     if (fallback) {
-      setSelectedAsset(fallback);
+      setSelectedWalletId(fallback.id);
     }
-  }, [availableBalances, selectedAsset, selectedBalanceAvailable, wallets]);
+  }, [availableBalances, cryptoBalances, selectedBalanceAvailable, wallet, wallets]);
 
   const formatDate = (dateStr: string) => {
     const localeMap: Record<string, string> = {
@@ -289,24 +297,27 @@ export default function DashboardFixedDeposits() {
             </p>
 
             <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
-              {depositAssets.map((asset) => {
+              {wallets.map((assetWallet) => {
+                const asset = {
+                  symbol: assetWallet.symbol,
+                  name: assetWallet.name || assetWallet.symbol,
+                };
                 const bal = cryptoBalances.find((b) => b.symbol === asset.symbol);
-                const assetWallet = wallets.find((entry) => entry.symbol === asset.symbol);
                 const logo = CRYPTO_LOGOS[asset.symbol];
-                const canUseAsset = Boolean(assetWallet) && isBalanceAvailable(bal?.status);
+                const canUseAsset = isBalanceAvailable(bal?.status);
 
                 return (
                   <button
-                    key={asset.symbol}
+                    key={assetWallet.id}
                     type="button"
                     onClick={() => {
-                      setSelectedAsset(asset.symbol);
+                      setSelectedWalletId(assetWallet.id);
                       setAmount('');
                       setCopied(false);
                     }}
                     disabled={!canUseAsset}
                     className={`rounded-2xl border p-3 text-center transition-all ${
-                      selectedAsset === asset.symbol
+                      selectedWalletId === assetWallet.id
                         ? `border-2 ${CRYPTO_BORDER[asset.symbol] || 'border-[#006446]'} bg-[#006446]/[0.04] shadow-[0_24px_60px_-48px_rgba(0,100,70,0.45)]`
                         : canUseAsset
                         ? 'border-[#006446]/14 bg-white hover:border-[#006446]/25'
@@ -324,6 +335,9 @@ export default function DashboardFixedDeposits() {
                     </div>
                     <p className="text-sm font-bold text-slate-900">{asset.symbol}</p>
                     <p className="mt-0.5 text-[10px] text-[#006446]/70">{asset.name}</p>
+                    <p className="mt-0.5 truncate text-[10px] font-medium text-slate-500">
+                      {assetWallet.network || 'Custom network'}
+                    </p>
                     <p className={`mt-1 text-[10px] font-medium ${canUseAsset ? 'text-slate-600' : 'text-slate-500'}`}>
                       {t('dashboardAddFund.form.balanceShort')}: {bal
                         ? canUseAsset

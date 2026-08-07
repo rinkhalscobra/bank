@@ -377,6 +377,7 @@ export default function DashboardOverview() {
         fiatBalances={availableFiatBalances}
         cryptoBalances={availableCryptoBalances}
         showBalances={showBalances}
+        mainCurrency={fiatBalances[0]?.currency}
       />
 
       <div className="border border-[#006446]/14 bg-white p-5 shadow-[0_24px_60px_-48px_rgba(0,100,70,0.45)] transition-all duration-200 hover:shadow-[0_24px_70px_-44px_rgba(0,100,70,0.55)]">

@@ -81,14 +81,14 @@ export function useCryptoWallets() {
     fetchWallets();
   }, [fetchWallets]);
 
-  const updateWalletAddress = useCallback(async (symbol: string, walletAddress: string) => {
+  const updateWalletAddress = useCallback(async (walletId: string, walletAddress: string) => {
     if (!user) return { error: 'Not authenticated' };
     setUpdating(true);
     const { error } = await supabase
       .from('crypto_wallets')
       .update({ wallet_address: walletAddress })
       .eq('user_id', user.id)
-      .eq('symbol', symbol);
+      .eq('id', walletId);
     if (error) {
       setUpdating(false);
       return { error: error.message };

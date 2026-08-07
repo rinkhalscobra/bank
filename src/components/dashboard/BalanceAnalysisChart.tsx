@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { PieChart, Activity } from 'lucide-react';
 import type { FiatBalance } from '../../hooks/useFiatBalances';
 import type { CryptoBalance } from '../../hooks/useCryptoBalances';
+import { useLiveRates } from '../../hooks/useCurrencyExchange';
 import { useLanguage } from '../../contexts/LanguageContext';
 import '../../i18n/balance-analysis/translations';
 
@@ -9,6 +10,7 @@ interface Props {
   fiatBalances: FiatBalance[];
   cryptoBalances?: CryptoBalance[];
   showBalances: boolean;
+  mainCurrency?: string;
 }
 
 const APPROX_USD_RATES: Record<string, number> = {
@@ -58,23 +60,75 @@ const UI_COLORS = {
   tooltip: '#1e293b',
 };
 
-function formatUsd(amount: number) {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
+const LANGUAGE_LOCALES: Record<string, string> = {
+  en: 'en-US',
+  fr: 'fr-FR',
+  de: 'de-DE',
+  es: 'es-ES',
+  it: 'it-IT',
+  el: 'el-GR',
+};
+
+function getFiatRate(
+  fromCurrency: string,
+  toCurrency: string,
+  rates: Record<string, Record<string, number>>,
+) {
+  if (fromCurrency === toCurrency) return 1;
+
+  const directRate = Number(rates[fromCurrency]?.[toCurrency]);
+  if (directRate > 0) return directRate;
+
+  const inverseRate = Number(rates[toCurrency]?.[fromCurrency]);
+  if (inverseRate > 0) return 1 / inverseRate;
+
+  const fromUsdValue = APPROX_USD_RATES[fromCurrency];
+  const toUsdValue = APPROX_USD_RATES[toCurrency];
+  return fromUsdValue > 0 && toUsdValue > 0 ? fromUsdValue / toUsdValue : 0;
 }
 
-function formatCompact(amount: number) {
-  if (amount >= 1000) return `$${(amount / 1000).toFixed(1)}k`;
-  return `$${amount.toFixed(0)}`;
+function formatCurrency(amount: number, currency: string, locale: string) {
+  try {
+    return new Intl.NumberFormat(locale, {
+      style: 'currency',
+      currency,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(amount);
+  } catch {
+    return `${currency} ${amount.toLocaleString(locale, {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })}`;
+  }
+}
+
+function formatCompactCurrency(amount: number, currency: string, locale: string) {
+  try {
+    return new Intl.NumberFormat(locale, {
+      style: 'currency',
+      currency,
+      notation: 'compact',
+      maximumFractionDigits: 1,
+    }).format(amount);
+  } catch {
+    return `${currency} ${amount.toLocaleString(locale, {
+      notation: 'compact',
+      maximumFractionDigits: 1,
+    })}`;
+  }
 }
 
 function DonutChart({
   segments,
   size = 200,
   centerTotalLabel,
+  formatTotal,
 }: {
   segments: { label: string; value: number; color: string }[];
   size?: number;
   centerTotalLabel: string;
+  formatTotal: (amount: number) => string;
 }) {
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const total = segments.reduce((s, seg) => s + seg.value, 0);
@@ -126,7 +180,7 @@ function DonutChart({
         ) : (
           <>
             <span className="text-xs" style={{ color: UI_COLORS.accentMuted }}>{centerTotalLabel}</span>
-            <span className="text-lg font-bold text-slate-900">{formatUsd(total)}</span>
+            <span className="text-lg font-bold text-slate-900">{formatTotal(total)}</span>
           </>
         )}
       </div>
@@ -194,7 +248,15 @@ function smoothPath(points: { x: number; y: number }[]): string {
   return d.join(' ');
 }
 
-function WaveGraph({ items, showBalances }: { items: ColumnItem[]; showBalances: boolean }) {
+function WaveGraph({
+  items,
+  showBalances,
+  formatAxisValue,
+}: {
+  items: ColumnItem[];
+  showBalances: boolean;
+  formatAxisValue: (amount: number) => string;
+}) {
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const maxValue = Math.max(...items.map((i) => i.value), 1) * 1.12;
   const padding = { top: 36, right: 24, bottom: 50, left: 60 };
@@ -256,7 +318,7 @@ function WaveGraph({ items, showBalances }: { items: ColumnItem[]; showBalances:
                 strokeDasharray={tick === 0 ? 'none' : '3 6'}
               />
               <text x={padding.left - 10} y={y + 4} textAnchor="end" className="text-[10px]" fill="#94a3b8">
-                {showBalances ? formatCompact(tick) : ''}
+                {showBalances ? formatAxisValue(tick) : ''}
               </text>
             </g>
           );
@@ -363,10 +425,17 @@ export default function BalanceAnalysisChart({
   fiatBalances,
   cryptoBalances = [],
   showBalances,
+  mainCurrency,
 }: Props) {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const [viewMode, setViewMode] = useState<ViewMode>('donut');
   const [dataFilter, setDataFilter] = useState<DataFilter>('all');
+  const baseCurrency = (mainCurrency || fiatBalances[0]?.currency || 'USD').trim().toUpperCase();
+  const locale = LANGUAGE_LOCALES[language] || 'en-US';
+  const fiatCurrencies = Array.from(new Set([baseCurrency, ...fiatBalances.map((balance) => balance.currency)]));
+  const cryptoSymbols = Array.from(new Set(cryptoBalances.map((balance) => balance.symbol)));
+  const { rates, cryptoPrices } = useLiveRates(fiatCurrencies, cryptoSymbols);
+  const usdToBaseRate = getFiatRate('USD', baseCurrency, rates);
 
   const DATA_FILTER_OPTIONS: { key: DataFilter; label: string }[] = [
     { key: 'all', label: t('balanceAnalysis.filters.all') },
@@ -381,36 +450,33 @@ export default function BalanceAnalysisChart({
     CHF: t('balanceAnalysis.currencies.chf'),
   };
 
-  const fiatUsdValues = fiatBalances.map((fb) => ({
+  const fiatBaseValues = fiatBalances.map((fb) => ({
     label: fb.currency,
-    value: fb.balance * (APPROX_USD_RATES[fb.currency] || 1),
+    value: fb.balance * getFiatRate(fb.currency, baseCurrency, rates),
     color: FIAT_COLORS[fb.currency] || '#64748b',
   }));
 
-  const cryptoUsdValues = cryptoBalances
+  const cryptoBaseValues = cryptoBalances
     .filter((c) => c.balance > 0)
     .map((c) => ({
       label: c.symbol,
-      value: c.balance * (APPROX_CRYPTO_USD[c.symbol] || 1),
+      value: c.balance * (cryptoPrices[c.symbol]?.usd || APPROX_CRYPTO_USD[c.symbol] || 0) * usdToBaseRate,
       color: CRYPTO_COLORS[c.symbol] || '#94a3b8',
     }));
 
   const filteredDonutSegments =
     dataFilter === 'fiat'
-      ? fiatUsdValues
+      ? fiatBaseValues
       : dataFilter === 'crypto'
-      ? cryptoUsdValues
-      : [...fiatUsdValues, ...cryptoUsdValues];
+      ? cryptoBaseValues
+      : [...fiatBaseValues, ...cryptoBaseValues];
 
   const fiatBarItems = fiatBalances.map((fb) => ({
     label: `${fb.name.trim() || CURRENCY_NAMES[fb.currency] || fb.currency} (${fb.currency})`,
     shortLabel: fb.currency,
-    value: fb.balance * (APPROX_USD_RATES[fb.currency] || 1),
+    value: fb.balance * getFiatRate(fb.currency, baseCurrency, rates),
     color: FIAT_COLORS[fb.currency] || '#64748b',
-    displayValue: new Intl.NumberFormat(
-      fb.currency === 'EUR' ? 'de-DE' : fb.currency === 'CAD' ? 'en-CA' : 'en-US',
-      { style: 'currency', currency: fb.currency }
-    ).format(fb.balance),
+    displayValue: formatCurrency(fb.balance, fb.currency, locale),
   }));
 
   const cryptoBarItems = cryptoBalances
@@ -418,7 +484,7 @@ export default function BalanceAnalysisChart({
     .map((c) => ({
       label: `${c.name} (${c.symbol})`,
       shortLabel: c.symbol,
-      value: c.balance * (APPROX_CRYPTO_USD[c.symbol] || 1),
+      value: c.balance * (cryptoPrices[c.symbol]?.usd || APPROX_CRYPTO_USD[c.symbol] || 0) * usdToBaseRate,
       color: CRYPTO_COLORS[c.symbol] || '#94a3b8',
       displayValue: `${c.balance.toLocaleString('en-US', { maximumFractionDigits: 4 })} ${c.symbol}`,
     }));
@@ -434,6 +500,11 @@ export default function BalanceAnalysisChart({
     { key: 'donut', icon: PieChart, tip: t('balanceAnalysis.viewModes.donut') },
     { key: 'bar', icon: Activity, tip: t('balanceAnalysis.viewModes.wave') },
   ];
+
+  const translatedUsdTotal = t('balanceAnalysis.summary.totalUsd');
+  const centerTotalLabel = translatedUsdTotal.includes('USD')
+    ? translatedUsdTotal.replace(/USD/g, baseCurrency)
+    : `${translatedUsdTotal} (${baseCurrency})`;
 
   const hiddenPlaceholder = (size: number) => (
     <div className="flex items-center justify-center" style={{ width: size, height: size }}>
@@ -502,7 +573,8 @@ export default function BalanceAnalysisChart({
                 <DonutChart
                   segments={filteredDonutSegments}
                   size={220}
-                  centerTotalLabel={t('balanceAnalysis.summary.totalUsd')}
+                  centerTotalLabel={centerTotalLabel}
+                  formatTotal={(amount) => formatCurrency(amount, baseCurrency, locale)}
                 />
               ) : (
                 hiddenPlaceholder(220)
@@ -517,7 +589,11 @@ export default function BalanceAnalysisChart({
 
         {viewMode === 'bar' && (
           <div className="space-y-4">
-            <WaveGraph items={filteredBarItems} showBalances={showBalances} />
+            <WaveGraph
+              items={filteredBarItems}
+              showBalances={showBalances}
+              formatAxisValue={(amount) => formatCompactCurrency(amount, baseCurrency, locale)}
+            />
 
             <div className="flex flex-wrap gap-x-5 gap-y-1 justify-center pt-2">
               {filteredBarItems.map((item) => (
