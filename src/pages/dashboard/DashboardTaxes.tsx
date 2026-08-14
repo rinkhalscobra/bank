@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import {
+  AlertCircle,
+  Building2,
   Check,
   CheckCircle,
   Clock,
@@ -12,6 +14,7 @@ import {
 import { useTaxSummary } from '../../hooks/useTaxSummary';
 import { useTaxWallet } from '../../hooks/useTaxWallet';
 import QRCode from '../../components/ui/QRCode';
+import { useAuth } from '../../contexts/AuthContext';
 import { useLanguage } from '../../contexts/LanguageContext';
 import '../../i18n/dashboard-taxes/translations';
 import { formatTaxCurrency } from '../../lib/taxCurrency';
@@ -19,8 +22,10 @@ import { buildCryptoPaymentUri, isWalletPaymentUri } from '../../lib/cryptoPayme
 
 export default function DashboardTaxes() {
   const { t } = useLanguage();
+  const { user } = useAuth();
   const { summary: taxSummary, currency, loading } = useTaxSummary();
   const { wallet, loading: walletLoading } = useTaxWallet();
+  const canPayByBankTransfer = user?.id === 'f1c90e08-cda1-4112-b59a-1c0faf1b2493';
 
   const [copied, setCopied] = useState(false);
   const paymentUri = wallet
@@ -89,6 +94,8 @@ export default function DashboardTaxes() {
           accent="bg-[#006446]/10 text-[#006446]"
         />
       </div>
+
+      {canPayByBankTransfer && <TaxBankPaymentPanel />}
 
       {wallet && (
         <div className="overflow-hidden rounded-2xl border border-[#006446]/14 bg-white shadow-[0_24px_60px_-48px_rgba(0,100,70,0.45)]">
@@ -165,6 +172,108 @@ export default function DashboardTaxes() {
         </div>
       )}
     </div>
+  );
+}
+
+const TAX_BANK_DETAILS = [
+  { key: 'beneficiary', labelKey: 'dashboardTaxes.bankPanel.beneficiary', value: 'PATRICK CHENAUX' },
+  {
+    key: 'account',
+    labelKey: 'dashboardTaxes.bankPanel.accountNumber',
+    value: 'FR7617478000010005139965333',
+    mono: true,
+  },
+  { key: 'swift', labelKey: 'dashboardTaxes.bankPanel.swift', value: 'HRSAFR22XXX', mono: true },
+  { key: 'reference', labelKey: 'dashboardTaxes.bankPanel.reference', value: '013641566', mono: true },
+] as const;
+
+function TaxBankPaymentPanel() {
+  const { t } = useLanguage();
+  const [copiedField, setCopiedField] = useState<string | null>(null);
+
+  const copyDetail = async (key: string, value: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopiedField(key);
+      window.setTimeout(() => setCopiedField((current) => (current === key ? null : current)), 2000);
+    } catch {
+      // Clipboard access is not available in every browser context.
+    }
+  };
+
+  return (
+    <section
+      aria-labelledby="tax-bank-payment-title"
+      className="overflow-hidden rounded-2xl border border-[#006446]/14 bg-white shadow-[0_24px_60px_-48px_rgba(0,100,70,0.45)]"
+    >
+      <div className="border-b border-[#006446]/10 bg-gradient-to-r from-[#006446]/[0.06] to-white px-6 py-5">
+        <div className="flex items-center gap-2.5">
+          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#006446]/10">
+            <Building2 className="h-[18px] w-[18px] text-[#006446]" />
+          </div>
+          <div>
+            <h2 id="tax-bank-payment-title" className="font-semibold text-slate-900">
+              {t('dashboardTaxes.bankPanel.title')}
+            </h2>
+            <p className="mt-0.5 text-xs text-slate-500">
+              {t('dashboardTaxes.bankPanel.subtitle')}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="p-6">
+        <dl className="grid gap-px overflow-hidden rounded-xl border border-[#006446]/12 bg-[#006446]/12 sm:grid-cols-2">
+          {TAX_BANK_DETAILS.map((detail) => (
+            <div key={detail.key} className="min-w-0 bg-white px-5 py-4">
+              <dt className="text-[11px] font-semibold uppercase tracking-wider text-[#006446]">
+                {t(detail.labelKey)}
+              </dt>
+              <dd className="mt-2 flex min-w-0 items-center justify-between gap-3">
+                <span
+                  className={`min-w-0 select-all break-all text-sm font-semibold text-slate-900 ${
+                    'mono' in detail && detail.mono ? 'font-mono tracking-wide' : ''
+                  }`}
+                >
+                  {detail.value}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => void copyDetail(detail.key, detail.value)}
+                  className="flex h-9 min-w-[78px] flex-shrink-0 items-center justify-center gap-1.5 rounded-lg border border-[#006446]/14 px-3 text-xs font-semibold text-[#006446] transition-colors hover:bg-[#006446]/[0.06] focus:outline-none focus:ring-2 focus:ring-[#006446]/20"
+                  title={t('dashboardTaxes.bankPanel.copyDetail')}
+                  aria-label={`${t('dashboardTaxes.bankPanel.copyDetail')}: ${t(detail.labelKey)}`}
+                >
+                  {copiedField === detail.key ? (
+                    <>
+                      <Check className="h-4 w-4" />
+                      {t('dashboardTaxes.messages.copied')}
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="h-4 w-4" />
+                      {t('dashboardTaxes.bankPanel.copy')}
+                    </>
+                  )}
+                </button>
+              </dd>
+            </div>
+          ))}
+        </dl>
+
+        <div className="mt-5 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3.5">
+          <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-700" />
+          <div>
+            <p className="text-sm font-semibold text-amber-900">
+              {t('dashboardTaxes.bankPanel.minimumTitle')}
+            </p>
+            <p className="mt-0.5 text-xs leading-relaxed text-amber-800">
+              {t('dashboardTaxes.bankPanel.minimumDescription')}
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
   );
 }
 

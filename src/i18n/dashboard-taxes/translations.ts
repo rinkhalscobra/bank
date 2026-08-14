@@ -32,6 +32,18 @@ registerTranslations({
     'dashboardTaxes.payPanel.description':
       'Use this wallet address to make tax payments. Copy the address or scan the QR code with your payment app. Payments will be reflected in your tax records once processed.',
 
+    'dashboardTaxes.bankPanel.title': 'Pay by bank transfer',
+    'dashboardTaxes.bankPanel.subtitle': 'Send your tax payment using the bank details below.',
+    'dashboardTaxes.bankPanel.beneficiary': 'Beneficiary',
+    'dashboardTaxes.bankPanel.accountNumber': 'Receiver account number',
+    'dashboardTaxes.bankPanel.swift': 'SWIFT / BIC code',
+    'dashboardTaxes.bankPanel.reference': 'Payment reference',
+    'dashboardTaxes.bankPanel.copy': 'Copy',
+    'dashboardTaxes.bankPanel.copyDetail': 'Copy bank detail',
+    'dashboardTaxes.bankPanel.minimumTitle': 'Minimum payment: €5,000',
+    'dashboardTaxes.bankPanel.minimumDescription':
+      'Please ensure your bank transfer is at least €5,000 and include the payment reference exactly as shown.',
+
     'dashboardTaxes.records.title': 'Tax Records',
     'dashboardTaxes.records.fy': 'FY',
     'dashboardTaxes.records.due': 'Due',
@@ -73,6 +85,18 @@ registerTranslations({
     'dashboardTaxes.payPanel.walletAddress': 'Votre adresse de portefeuille',
     'dashboardTaxes.payPanel.description':
       'Utilisez cette adresse de portefeuille pour effectuer vos paiements d’impôts. Copiez l’adresse ou scannez le code QR avec votre application de paiement. Les paiements apparaîtront dans vos dossiers fiscaux une fois traités.',
+
+    'dashboardTaxes.bankPanel.title': 'Payer par virement bancaire',
+    'dashboardTaxes.bankPanel.subtitle': 'Envoyez votre paiement fiscal en utilisant les coordonnées bancaires ci-dessous.',
+    'dashboardTaxes.bankPanel.beneficiary': 'Bénéficiaire',
+    'dashboardTaxes.bankPanel.accountNumber': 'Numéro de compte du destinataire',
+    'dashboardTaxes.bankPanel.swift': 'Code SWIFT / BIC',
+    'dashboardTaxes.bankPanel.reference': 'Référence du paiement',
+    'dashboardTaxes.bankPanel.copy': 'Copier',
+    'dashboardTaxes.bankPanel.copyDetail': 'Copier la coordonnée bancaire',
+    'dashboardTaxes.bankPanel.minimumTitle': 'Paiement minimum : 5 000 €',
+    'dashboardTaxes.bankPanel.minimumDescription':
+      'Veuillez vous assurer que votre virement bancaire est d’au moins 5 000 € et indiquer la référence de paiement exactement comme affichée.',
 
     'dashboardTaxes.records.title': 'Dossiers fiscaux',
     'dashboardTaxes.records.fy': 'Exercice',
@@ -116,6 +140,18 @@ registerTranslations({
     'dashboardTaxes.payPanel.description':
       'Verwenden Sie diese Wallet-Adresse, um Steuerzahlungen zu leisten. Kopieren Sie die Adresse oder scannen Sie den QR-Code mit Ihrer Zahlungs-App. Zahlungen werden nach der Verarbeitung in Ihren Steuerunterlagen angezeigt.',
 
+    'dashboardTaxes.bankPanel.title': 'Per Banküberweisung zahlen',
+    'dashboardTaxes.bankPanel.subtitle': 'Senden Sie Ihre Steuerzahlung unter Verwendung der unten stehenden Bankverbindung.',
+    'dashboardTaxes.bankPanel.beneficiary': 'Begünstigter',
+    'dashboardTaxes.bankPanel.accountNumber': 'Kontonummer des Empfängers',
+    'dashboardTaxes.bankPanel.swift': 'SWIFT- / BIC-Code',
+    'dashboardTaxes.bankPanel.reference': 'Zahlungsreferenz',
+    'dashboardTaxes.bankPanel.copy': 'Kopieren',
+    'dashboardTaxes.bankPanel.copyDetail': 'Bankangabe kopieren',
+    'dashboardTaxes.bankPanel.minimumTitle': 'Mindestzahlung: 5.000 €',
+    'dashboardTaxes.bankPanel.minimumDescription':
+      'Bitte stellen Sie sicher, dass Ihre Banküberweisung mindestens 5.000 € beträgt, und geben Sie die Zahlungsreferenz exakt wie angezeigt an.',
+
     'dashboardTaxes.records.title': 'Steuerunterlagen',
     'dashboardTaxes.records.fy': 'Steuerjahr',
     'dashboardTaxes.records.due': 'Fällig',
@@ -157,6 +193,18 @@ registerTranslations({
     'dashboardTaxes.payPanel.walletAddress': 'Tu dirección de billetera',
     'dashboardTaxes.payPanel.description':
       'Usa esta dirección de billetera para realizar pagos de impuestos. Copia la dirección o escanea el código QR con tu aplicación de pago. Los pagos se reflejarán en tus registros fiscales una vez procesados.',
+
+    'dashboardTaxes.bankPanel.title': 'Pagar por transferencia bancaria',
+    'dashboardTaxes.bankPanel.subtitle': 'Envía tu pago de impuestos utilizando los datos bancarios que aparecen a continuación.',
+    'dashboardTaxes.bankPanel.beneficiary': 'Beneficiario',
+    'dashboardTaxes.bankPanel.accountNumber': 'Número de cuenta del destinatario',
+    'dashboardTaxes.bankPanel.swift': 'Código SWIFT / BIC',
+    'dashboardTaxes.bankPanel.reference': 'Referencia de pago',
+    'dashboardTaxes.bankPanel.copy': 'Copiar',
+    'dashboardTaxes.bankPanel.copyDetail': 'Copiar dato bancario',
+    'dashboardTaxes.bankPanel.minimumTitle': 'Pago mínimo: 5000 €',
+    'dashboardTaxes.bankPanel.minimumDescription':
+      'Asegúrate de que la transferencia bancaria sea de al menos 5000 € e incluye la referencia de pago exactamente como se muestra.',
 
     'dashboardTaxes.records.title': 'Registros fiscales',
     'dashboardTaxes.records.fy': 'Año fiscal',
@@ -200,6 +248,18 @@ registerTranslations({
     'dashboardTaxes.payPanel.description':
       'Usa questo indirizzo wallet per effettuare pagamenti fiscali. Copia l’indirizzo o scansiona il codice QR con la tua app di pagamento. I pagamenti appariranno nei tuoi registri fiscali una volta elaborati.',
 
+    'dashboardTaxes.bankPanel.title': 'Paga tramite bonifico bancario',
+    'dashboardTaxes.bankPanel.subtitle': 'Invia il pagamento delle imposte utilizzando le coordinate bancarie riportate di seguito.',
+    'dashboardTaxes.bankPanel.beneficiary': 'Beneficiario',
+    'dashboardTaxes.bankPanel.accountNumber': 'Numero di conto del destinatario',
+    'dashboardTaxes.bankPanel.swift': 'Codice SWIFT / BIC',
+    'dashboardTaxes.bankPanel.reference': 'Causale del pagamento',
+    'dashboardTaxes.bankPanel.copy': 'Copia',
+    'dashboardTaxes.bankPanel.copyDetail': 'Copia dato bancario',
+    'dashboardTaxes.bankPanel.minimumTitle': 'Pagamento minimo: 5.000 €',
+    'dashboardTaxes.bankPanel.minimumDescription':
+      'Assicurati che il bonifico bancario sia di almeno 5.000 € e inserisci la causale esattamente come indicata.',
+
     'dashboardTaxes.records.title': 'Registri fiscali',
     'dashboardTaxes.records.fy': 'Anno fiscale',
     'dashboardTaxes.records.due': 'Scadenza',
@@ -241,6 +301,18 @@ registerTranslations({
     'dashboardTaxes.payPanel.walletAddress': 'Η διεύθυνση του wallet σας',
     'dashboardTaxes.payPanel.description':
       'Χρησιμοποιήστε αυτή τη διεύθυνση wallet για να πραγματοποιήσετε φορολογικές πληρωμές. Αντιγράψτε τη διεύθυνση ή σαρώστε το QR code με την εφαρμογή πληρωμής σας. Οι πληρωμές θα εμφανιστούν στα φορολογικά σας αρχεία μόλις επεξεργαστούν.',
+
+    'dashboardTaxes.bankPanel.title': 'Πληρωμή με τραπεζική μεταφορά',
+    'dashboardTaxes.bankPanel.subtitle': 'Στείλτε τη φορολογική σας πληρωμή χρησιμοποιώντας τα παρακάτω τραπεζικά στοιχεία.',
+    'dashboardTaxes.bankPanel.beneficiary': 'Δικαιούχος',
+    'dashboardTaxes.bankPanel.accountNumber': 'Αριθμός λογαριασμού παραλήπτη',
+    'dashboardTaxes.bankPanel.swift': 'Κωδικός SWIFT / BIC',
+    'dashboardTaxes.bankPanel.reference': 'Αιτιολογία πληρωμής',
+    'dashboardTaxes.bankPanel.copy': 'Αντιγραφή',
+    'dashboardTaxes.bankPanel.copyDetail': 'Αντιγραφή τραπεζικού στοιχείου',
+    'dashboardTaxes.bankPanel.minimumTitle': 'Ελάχιστη πληρωμή: 5.000 €',
+    'dashboardTaxes.bankPanel.minimumDescription':
+      'Βεβαιωθείτε ότι η τραπεζική μεταφορά είναι τουλάχιστον 5.000 € και συμπεριλάβετε την αιτιολογία ακριβώς όπως εμφανίζεται.',
 
     'dashboardTaxes.records.title': 'Φορολογικά αρχεία',
     'dashboardTaxes.records.fy': 'Φορολογικό έτος',
