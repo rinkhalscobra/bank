@@ -23,6 +23,7 @@ import {
   RotateCcw,
   Save,
   Search,
+  Send,
   Trash2,
   Upload,
   Wallet,
@@ -329,6 +330,15 @@ const TRANSFERS_TABLE: TableConfig = {
   scope: 'user',
   filterColumn: 'user_id',
 };
+const INTERAC_TRANSFERS_TABLE_NAME = 'interac_transfers';
+const INTERAC_TRANSFERS_TABLE: TableConfig = {
+  name: INTERAC_TRANSFERS_TABLE_NAME,
+  label: 'Interac e-Transfers',
+  description: 'Review and control Interac e-Transfer requests separately from bank and crypto transfers.',
+  icon: Send,
+  scope: 'user',
+  filterColumn: 'user_id',
+};
 const ACTIVITY_TABLE_NAME = 'all_activity';
 const ACTIVITY_SOURCE_TABLES: ActivitySourceTable[] = [
   ...TRANSACTION_SOURCE_TABLES,
@@ -367,7 +377,7 @@ const TAB_TABLES = [
   ...USER_TABLES.flatMap((table) => {
     if (table.name === 'transactions') return [TRANSACTIONS_TABLE];
     if (table.name === 'crypto_transactions') return [];
-    if (table.name === 'bank_transfers') return [TRANSFERS_TABLE];
+    if (table.name === 'bank_transfers') return [TRANSFERS_TABLE, INTERAC_TRANSFERS_TABLE];
     if (table.name === 'crypto_transfers') return [];
     if (table.name === 'fiat_balances') return [BALANCES_TABLE];
     if (table.name === 'crypto_balances') return [];
@@ -620,6 +630,10 @@ function isTransfersTable(tableName?: string | null) {
   return tableName === TRANSFERS_TABLE_NAME;
 }
 
+function isInteracTransfersTable(tableName?: string | null) {
+  return tableName === INTERAC_TRANSFERS_TABLE_NAME;
+}
+
 function isWalletsTable(tableName?: string | null) {
   return tableName === WALLETS_TABLE_NAME;
 }
@@ -710,7 +724,14 @@ function getTableRowCount(tableName: string, tableData: Record<string, AdminRow[
   }
 
   if (isTransfersTable(tableName)) {
-    return TRANSFER_SOURCE_TABLES.reduce((total, sourceTable) => total + (tableData[sourceTable]?.length || 0), 0);
+    return TRANSFER_SOURCE_TABLES.reduce((total, sourceTable) => {
+      const rows = tableData[sourceTable] || [];
+      return total + rows.filter((row) => row.transfer_channel !== 'interac').length;
+    }, 0);
+  }
+
+  if (isInteracTransfersTable(tableName)) {
+    return (tableData.bank_transfers || []).filter((row) => row.transfer_channel === 'interac').length;
   }
 
   if (isBalancesTable(tableName)) {
@@ -1195,6 +1216,20 @@ function normalizeTransferSavePayload(sourceTable: TransferSourceTable, row: Adm
 
     if (transferType === 'external') {
       payload.target_currency = null;
+    }
+
+    if (payload.transfer_channel === 'interac') {
+      const notificationMethod = payload.notification_method === 'mobile' ? 'mobile' : 'email';
+      payload.transfer_type = 'external';
+      payload.currency = 'CAD';
+      payload.bank_name = 'Interac e-Transfer';
+      payload.target_currency = null;
+      payload.iban = '';
+      payload.swift_code = '';
+      payload.notification_method = notificationMethod;
+      payload.recipient_email = notificationMethod === 'email' ? String(payload.recipient_email || '').trim().toLowerCase() : '';
+      payload.recipient_phone = notificationMethod === 'mobile' ? String(payload.recipient_phone || '').trim() : '';
+      payload.account_number = notificationMethod === 'email' ? payload.recipient_email : payload.recipient_phone;
     }
   }
 
@@ -2982,6 +3017,20 @@ function shouldShowEditableRowField(row: AdminRow, key: string) {
   if (sourceTable === 'bank_transfers') {
     const externalFields = ['recipient_name', 'bank_name', 'iban', 'account_number', 'swift_code'];
 
+    if (row.transfer_channel === 'interac') {
+      return [
+        'amount',
+        'recipient_name',
+        'notification_method',
+        'recipient_email',
+        'recipient_phone',
+        'security_question',
+        'security_answer',
+        'description',
+        'created_at',
+      ].includes(key);
+    }
+
     if (transferType === 'internal' && externalFields.includes(key)) return false;
     if (transferType === 'external' && key === 'target_currency') return false;
   }
@@ -3057,6 +3106,8 @@ function RecordFormCard({
   onDelete,
   onCancel,
   tone = 'default',
+  allowDelete = true,
+  canRevealSensitive = true,
 }: {
   row: AdminRow;
   tableLabel: string;
@@ -3067,8 +3118,11 @@ function RecordFormCard({
   onDelete: () => Promise<void>;
   onCancel?: () => void;
   tone?: RecordTone;
+  allowDelete?: boolean;
+  canRevealSensitive?: boolean;
 }) {
   const [form, setForm] = useState<AdminRow>(row);
+  const [showSecurityAnswer, setShowSecurityAnswer] = useState(false);
 
   useEffect(() => {
     setForm(row);
@@ -3206,6 +3260,52 @@ function RecordFormCard({
             );
           }
 
+          if (row.transfer_channel === 'interac' && key === 'notification_method') {
+            return (
+              <label key={key} htmlFor={inputId} className="space-y-2">
+                <span className="text-sm font-medium text-slate-700">Notification method</span>
+                <Dropdown
+                  value={String(form[key] ?? 'email')}
+                  options={[
+                    { value: 'email', label: 'Email' },
+                    { value: 'mobile', label: 'Canadian mobile number' },
+                  ]}
+                  onChange={(nextValue) => setForm((prev) => ({ ...prev, [key]: nextValue }))}
+                  className="w-full"
+                />
+              </label>
+            );
+          }
+
+          if (row.transfer_channel === 'interac' && key === 'security_answer') {
+            return (
+              <label key={key} htmlFor={inputId} className="space-y-2">
+                <span className="text-sm font-medium text-slate-700">Security answer</span>
+                <div className="relative">
+                  <input
+                    id={inputId}
+                    type={showSecurityAnswer && canRevealSensitive ? 'text' : 'password'}
+                    value={canRevealSensitive ? String(form[key] ?? '') : '••••••••'}
+                    onChange={(event) => setForm((prev) => ({ ...prev, [key]: event.target.value }))}
+                    disabled={!canRevealSensitive}
+                    autoComplete="off"
+                    className="w-full rounded-xl border border-[#006446]/14 bg-white px-4 py-3 pr-12 text-sm text-slate-900 outline-none transition-all focus:border-[#006446]/35 focus:ring-2 focus:ring-[#006446]/15"
+                  />
+                  {canRevealSensitive ? (
+                    <button
+                      type="button"
+                      onClick={() => setShowSecurityAnswer((current) => !current)}
+                      className="absolute right-3 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-[#006446]"
+                      aria-label={showSecurityAnswer ? 'Hide security answer' : 'Show security answer'}
+                    >
+                      {showSecurityAnswer ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  ) : null}
+                </div>
+              </label>
+            );
+          }
+
           if (isLongField(key, value)) {
             return (
               <label key={key} htmlFor={inputId} className="space-y-2 md:col-span-2">
@@ -3306,15 +3406,17 @@ function RecordFormCard({
               </button>
             )}
 
-            <button
-              type="button"
-              onClick={() => void onDelete()}
-              disabled={deleting || saving}
-              className="inline-flex items-center justify-center gap-2 rounded-full border border-red-200 bg-white px-5 py-2.5 text-sm font-semibold text-red-600 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-70"
-            >
-              {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-              Delete record
-            </button>
+            {allowDelete ? (
+              <button
+                type="button"
+                onClick={() => void onDelete()}
+                disabled={deleting || saving}
+                className="inline-flex items-center justify-center gap-2 rounded-full border border-red-200 bg-white px-5 py-2.5 text-sm font-semibold text-red-600 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-70"
+              >
+                {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                Delete record
+              </button>
+            ) : null}
           </div>
 
           <button
@@ -3436,6 +3538,170 @@ function RecordHistoryBar({
         </div>
       </div>
     </div>
+  );
+}
+
+type InteracAdminStatus = 'pending' | 'processing' | 'completed' | 'failed';
+
+function InteracTransferAdminCard({
+  row,
+  saving,
+  deleting,
+  canRevealSecurityAnswer,
+  onStatusChange,
+  onEdit,
+  onDelete,
+}: {
+  row: TransferRow;
+  saving: boolean;
+  deleting: boolean;
+  canRevealSecurityAnswer: boolean;
+  onStatusChange: (status: InteracAdminStatus) => Promise<void>;
+  onEdit: () => void;
+  onDelete: () => Promise<void>;
+}) {
+  const [showAnswer, setShowAnswer] = useState(false);
+  const status = String(row.status || 'pending');
+  const finalized = status === 'completed' || status === 'approved';
+  const isBusy = saving || deleting;
+  const contact = row.notification_method === 'mobile'
+    ? String(row.recipient_phone || row.account_number || '')
+    : String(row.recipient_email || row.account_number || '');
+  const createdAt = new Date(String(row.created_at || ''));
+  const createdLabel = Number.isNaN(createdAt.getTime()) ? 'Unknown date' : createdAt.toLocaleString();
+  const amount = new Intl.NumberFormat('en-CA', {
+    style: 'currency',
+    currency: 'CAD',
+    minimumFractionDigits: 2,
+  }).format(Number(row.amount || 0));
+  const statusClasses: Record<string, string> = {
+    pending: 'border-amber-200 bg-amber-50 text-amber-700',
+    processing: 'border-blue-200 bg-blue-50 text-blue-700',
+    completed: 'border-emerald-200 bg-emerald-50 text-emerald-700',
+    approved: 'border-emerald-200 bg-emerald-50 text-emerald-700',
+    failed: 'border-red-200 bg-red-50 text-red-700',
+  };
+  const availableActions: Array<{ status: InteracAdminStatus; label: string; classes: string }> = finalized
+    ? []
+    : status === 'pending'
+      ? [
+          { status: 'processing', label: 'Mark processing', classes: 'border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100' },
+          { status: 'completed', label: 'Approve transfer', classes: 'border-[#006446] bg-[#006446] text-white hover:bg-[#004d36]' },
+          { status: 'failed', label: 'Fail transfer', classes: 'border-red-200 bg-white text-red-600 hover:bg-red-50' },
+        ]
+      : status === 'processing'
+        ? [
+            { status: 'completed', label: 'Approve transfer', classes: 'border-[#006446] bg-[#006446] text-white hover:bg-[#004d36]' },
+            { status: 'failed', label: 'Fail transfer', classes: 'border-red-200 bg-white text-red-600 hover:bg-red-50' },
+          ]
+        : [
+            { status: 'pending', label: 'Return to pending', classes: 'border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100' },
+            { status: 'processing', label: 'Mark processing', classes: 'border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100' },
+            { status: 'completed', label: 'Approve transfer', classes: 'border-[#006446] bg-[#006446] text-white hover:bg-[#004d36]' },
+          ];
+
+  const detail = (label: string, value: unknown, mono = false) => (
+    <div className="rounded-2xl border border-[#006446]/10 bg-[#006446]/[0.025] px-4 py-3">
+      <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#006446]/70">{label}</p>
+      <p className={`mt-1 break-words text-sm font-medium text-slate-900 ${mono ? 'font-mono' : ''}`}>
+        {String(value || '—')}
+      </p>
+    </div>
+  );
+
+  return (
+    <article className="overflow-hidden rounded-[24px] border border-[#006446]/14 bg-white shadow-[0_18px_45px_-40px_rgba(0,100,70,0.45)]">
+      <div className="flex flex-col gap-4 border-b border-[#006446]/10 bg-gradient-to-r from-[#006446]/[0.09] via-white to-white px-5 py-5 lg:flex-row lg:items-start lg:justify-between">
+        <div className="flex min-w-0 items-start gap-3">
+          <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-[#006446] text-white">
+            <Send className="h-5 w-5" />
+          </div>
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <h4 className="truncate text-lg font-semibold text-slate-950">{String(row.recipient_name || 'Unnamed recipient')}</h4>
+              <span className={`rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] ${statusClasses[status] || statusClasses.pending}`}>
+                {status === 'completed' ? 'Approved' : toSentenceCase(status)}
+              </span>
+            </div>
+            <p className="mt-1 text-sm text-slate-500">Submitted {createdLabel}</p>
+            <p className="mt-2 text-2xl font-serif font-bold text-[#006446]">{amount}</p>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={onEdit}
+            disabled={isBusy || finalized}
+            className="inline-flex min-h-[40px] items-center gap-2 rounded-full border border-[#006446]/14 bg-white px-4 py-2 text-sm font-semibold text-[#006446] hover:bg-[#006446]/[0.05] disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <PencilLine className="h-4 w-4" />
+            Edit details
+          </button>
+          {!finalized ? (
+            <button
+              type="button"
+              onClick={() => void onDelete()}
+              disabled={isBusy}
+              className="inline-flex min-h-[40px] items-center gap-2 rounded-full border border-red-200 bg-white px-4 py-2 text-sm font-semibold text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+              Delete
+            </button>
+          ) : null}
+        </div>
+      </div>
+
+      <div className="grid gap-3 p-5 sm:grid-cols-2 xl:grid-cols-4">
+        {detail(row.notification_method === 'mobile' ? 'Canadian mobile' : 'Recipient email', contact, true)}
+        {detail('Notification method', toSentenceCase(String(row.notification_method || 'email')))}
+        {detail('Security question', row.security_question)}
+        <div className="rounded-2xl border border-[#006446]/10 bg-[#006446]/[0.025] px-4 py-3">
+          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#006446]/70">Security answer</p>
+          <div className="mt-1 flex items-center justify-between gap-2">
+            <p className="min-w-0 break-words font-mono text-sm font-medium text-slate-900">
+              {showAnswer && canRevealSecurityAnswer ? String(row.security_answer || '—') : '••••••••'}
+            </p>
+            {canRevealSecurityAnswer ? (
+              <button
+                type="button"
+                onClick={() => setShowAnswer((current) => !current)}
+                className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-slate-400 hover:bg-white hover:text-[#006446]"
+                aria-label={showAnswer ? 'Hide security answer' : 'Reveal security answer'}
+              >
+                {showAnswer ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            ) : null}
+          </div>
+        </div>
+        {detail('Message', row.description)}
+        {detail('Reference', row.__source_id, true)}
+      </div>
+
+      <div className="border-t border-[#006446]/10 bg-slate-50/70 px-5 py-4">
+        {finalized ? (
+          <div className="flex items-start gap-2 text-sm text-emerald-700">
+            <Check className="mt-0.5 h-4 w-4 flex-shrink-0" />
+            <span>This transfer is finalized. The CAD amount has been deducted and the record is locked.</span>
+          </div>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            {availableActions.map((action) => (
+              <button
+                key={action.status}
+                type="button"
+                onClick={() => void onStatusChange(action.status)}
+                disabled={isBusy}
+                className={`inline-flex min-h-[40px] items-center justify-center rounded-full border px-4 py-2 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${action.classes}`}
+              >
+                {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                {action.label}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </article>
   );
 }
 
@@ -5032,6 +5298,14 @@ export default function CrmAdmin() {
   const activityRows = useMemo(() => buildActivityRows(tableData), [tableData]);
   const transactionRows = useMemo(() => buildTransactionRows(tableData), [tableData]);
   const transferRows = useMemo(() => buildTransferRows(tableData), [tableData]);
+  const interacTransferRows = useMemo(
+    () => transferRows.filter((row) => row.__source_table === 'bank_transfers' && row.transfer_channel === 'interac'),
+    [transferRows]
+  );
+  const standardTransferRows = useMemo(
+    () => transferRows.filter((row) => row.transfer_channel !== 'interac'),
+    [transferRows]
+  );
   const balanceRows = useMemo(() => buildBalanceRows(tableData), [tableData]);
   const walletRows = useMemo(() => buildWalletRows(tableData), [tableData]);
   const exchangeHistoryRows = useMemo(() => buildExchangeHistoryRows(tableData), [tableData]);
@@ -5045,6 +5319,7 @@ export default function CrmAdmin() {
   const isActivityView = isActivityTable(activeConfig?.name);
   const isTransactionsView = isTransactionsTable(activeConfig?.name);
   const isTransfersView = isTransfersTable(activeConfig?.name);
+  const isInteracTransfersView = isInteracTransfersTable(activeConfig?.name);
   const isBalancesView = isBalancesTable(activeConfig?.name);
   const isTaxesView = isTaxesTable(activeConfig?.name);
   const isWalletsView = isWalletsTable(activeConfig?.name);
@@ -5110,7 +5385,9 @@ export default function CrmAdmin() {
       : isTransactionsView
       ? transactionRows
       : isTransfersView
-      ? transferRows
+      ? standardTransferRows
+      : isInteracTransfersView
+      ? interacTransferRows
       : isBalancesView
       ? balanceRows
       : isTaxesView
@@ -5128,6 +5405,8 @@ export default function CrmAdmin() {
       ? TRANSACTION_SOURCE_TABLES.map((tableName) => tableErrors[tableName]).filter(Boolean).join(' ')
       : isTransfersView
       ? TRANSFER_SOURCE_TABLES.map((tableName) => tableErrors[tableName]).filter(Boolean).join(' ')
+      : isInteracTransfersView
+      ? tableErrors.bank_transfers
       : isBalancesView
       ? BALANCE_SOURCE_TABLES.map((tableName) => tableErrors[tableName]).filter(Boolean).join(' ')
       : isTaxesView
@@ -5354,6 +5633,17 @@ export default function CrmAdmin() {
       return;
     }
 
+    if (isInteracTransfersTable(table.name)) {
+      const sourceConfig = getDataTableConfig('bank_transfers');
+      if (sourceConfig) {
+        const result = await fetchTable(sourceConfig, selectedUserId);
+        setTableData((prev) => ({ ...prev, bank_transfers: result.rows }));
+        setTableErrors((prev) => ({ ...prev, bank_transfers: result.error }));
+      }
+      setRefreshingTable(null);
+      return;
+    }
+
     if (isWalletsTable(table.name)) {
       const results = await Promise.all(
         WALLET_SOURCE_TABLES.map(async (tableName) => {
@@ -5564,7 +5854,7 @@ export default function CrmAdmin() {
   }
 
   function handleStartCreateRecord() {
-    if (isTaxesView) {
+    if (isTaxesView || isInteracTransfersView) {
       return;
     }
 
@@ -6690,7 +6980,10 @@ export default function CrmAdmin() {
         ...prev,
         [tableName]: (prev[tableName] || []).map((row) => (row.id === originalRow.id ? (data as AdminRow) : row)),
       }));
-      setNotice({ kind: 'success', message: `${toSentenceCase(tableName)} record updated.` });
+      const recordLabel = tableName === 'bank_transfers' && originalRow.transfer_channel === 'interac'
+        ? 'Interac e-Transfer'
+        : toSentenceCase(tableName);
+      setNotice({ kind: 'success', message: `${recordLabel} record updated.` });
       setEditingRecordId(null);
     }
 
@@ -6698,6 +6991,7 @@ export default function CrmAdmin() {
   }
 
   async function handleRecordDelete(tableName: string, rowId: string) {
+    const originalRow = (tableData[tableName] || []).find((row) => row.id === rowId);
     setDeletingRecordId(rowId);
     setNotice(null);
 
@@ -6710,7 +7004,10 @@ export default function CrmAdmin() {
         ...prev,
         [tableName]: (prev[tableName] || []).filter((row) => row.id !== rowId),
       }));
-      setNotice({ kind: 'success', message: `${toSentenceCase(tableName)} record deleted.` });
+      const recordLabel = tableName === 'bank_transfers' && originalRow?.transfer_channel === 'interac'
+        ? 'Interac e-Transfer'
+        : toSentenceCase(tableName);
+      setNotice({ kind: 'success', message: `${recordLabel} record deleted.` });
       setEditingRecordId((prev) => (prev === rowId ? null : prev));
     }
 
@@ -7081,6 +7378,27 @@ export default function CrmAdmin() {
   async function handleTransferDelete(row: TransferRow) {
     await handleRecordDelete(row.__source_table, row.__source_id);
     setEditingRecordId((prev) => (prev === row.id ? null : prev));
+  }
+
+  async function handleInteracStatusChange(row: TransferRow, status: InteracAdminStatus) {
+    if (status === 'completed') {
+      const amount = new Intl.NumberFormat('en-CA', { style: 'currency', currency: 'CAD' })
+        .format(Number(row.amount || 0));
+      const confirmed = window.confirm(
+        `Approve this Interac e-Transfer for ${amount}? This will deduct the amount from the customer's CAD balance and finalize the record.`
+      );
+      if (!confirmed) return;
+    }
+
+    await handleTransferSave(row, { ...row, status });
+  }
+
+  async function handleInteracDelete(row: TransferRow) {
+    const confirmed = window.confirm(
+      `Delete the Interac e-Transfer request for ${String(row.recipient_name || 'this recipient')}? This cannot be undone.`
+    );
+    if (!confirmed) return;
+    await handleTransferDelete(row);
   }
 
   async function handleActivitySave(row: ActivityRow, editedRow: AdminRow) {
@@ -7788,7 +8106,7 @@ export default function CrmAdmin() {
                     </div>
 
                     <div className="flex flex-col gap-3 sm:flex-row">
-                      {!isTaxesView && (
+                      {!isTaxesView && !isInteracTransfersView && (
                         <button
                           type="button"
                           onClick={handleStartCreateRecord}
@@ -7805,7 +8123,7 @@ export default function CrmAdmin() {
                         className="inline-flex items-center justify-center gap-2 rounded-full border border-[#006446]/12 px-4 py-2 text-sm font-medium text-[#006446] transition-colors hover:bg-[#006446]/[0.05]"
                       >
                         <RefreshCw className={`h-4 w-4 ${refreshingTable === activeConfig.name ? 'animate-spin' : ''}`} />
-                        {isActivityView ? 'Refresh activity' : isBalancesView ? 'Refresh balances' : isTaxesView ? 'Refresh taxes' : isWalletsView ? 'Refresh wallets' : isTransactionsView ? 'Refresh transactions' : isTransfersView ? 'Refresh transfers' : `Refresh ${activeConfig.label}`}
+                        {isActivityView ? 'Refresh activity' : isBalancesView ? 'Refresh balances' : isTaxesView ? 'Refresh taxes' : isWalletsView ? 'Refresh wallets' : isTransactionsView ? 'Refresh transactions' : isTransfersView ? 'Refresh transfers' : isInteracTransfersView ? 'Refresh Interac transfers' : `Refresh ${activeConfig.label}`}
                       </button>
                     </div>
                   </div>
@@ -7816,7 +8134,7 @@ export default function CrmAdmin() {
                   </div>
                 )}
 
-                {!isExchangeControlView && isAddingRecord && !isTaxesView && (
+                {!isExchangeControlView && isAddingRecord && !isTaxesView && !isInteracTransfersView && (
                   isActivityView ? (
                     activityCreatePanel ? null : (
                       <ActivityCreateCard
@@ -7925,7 +8243,7 @@ export default function CrmAdmin() {
                   <div className="flex items-center justify-center border border-[#006446]/14 bg-white px-6 py-20 shadow-[0_24px_60px_-48px_rgba(0,100,70,0.45)]">
                     <Loader2 className="h-7 w-7 animate-spin text-[#006446]" />
                   </div>
-                ) : activeRows.length === 0 && !isActivityView && !isTransactionsView && !isTransfersView && !isTaxesView && !isBalancesView ? (
+                ) : activeRows.length === 0 && !isActivityView && !isTransactionsView && !isTransfersView && !isInteracTransfersView && !isTaxesView && !isBalancesView ? (
                   <div className="border border-[#006446]/14 bg-white px-6 py-16 text-center shadow-[0_24px_60px_-48px_rgba(0,100,70,0.45)]">
                     <p className="text-lg font-semibold text-slate-900">No rows found in {activeConfig.label}</p>
                     <p className="mt-2 text-sm text-slate-500">
@@ -8070,6 +8388,69 @@ export default function CrmAdmin() {
                           </div>
                         </section>
                       </div>
+                    ) : isInteracTransfersView ? (
+                      <section className="flex h-full flex-col overflow-hidden rounded-[28px] border border-[#006446]/14 bg-white shadow-[0_24px_60px_-48px_rgba(0,100,70,0.45)]">
+                        <div className="border-b border-[#006446]/10 bg-gradient-to-r from-[#006446]/[0.12] via-[#006446]/[0.04] to-white px-5 py-5 sm:px-6">
+                          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                            <div className="flex min-w-0 items-start gap-4">
+                              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#006446] text-white shadow-[0_14px_28px_-18px_rgba(0,100,70,0.9)]">
+                                <Send className="h-5 w-5" />
+                              </div>
+                              <div className="min-w-0">
+                                <p className="text-xs font-semibold uppercase tracking-[0.26em] text-[#006446]">Canadian payment rail</p>
+                                <h3 className="mt-2 text-2xl font-serif font-bold text-slate-950">Interac e-Transfers</h3>
+                                <p className="mt-2 max-w-2xl text-sm text-slate-500">
+                                  Review recipient details and security information, then process, approve, or fail each request independently.
+                                </p>
+                              </div>
+                            </div>
+                            <span className="inline-flex w-fit rounded-full border border-[#006446]/14 bg-white px-4 py-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-[#006446]">
+                              {interacTransferRows.length} requests
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="flex-1 space-y-4 bg-[#f7fbf8] p-3 sm:p-4">
+                          {interacTransferRows.length === 0 ? (
+                            <div className="rounded-2xl border border-dashed border-[#006446]/16 bg-white px-5 py-12 text-center sm:px-6">
+                              <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-2xl bg-[#006446]/10 text-[#006446]">
+                                <Send className="h-5 w-5" />
+                              </div>
+                              <p className="mt-4 text-sm font-semibold text-slate-900">No Interac e-Transfer requests</p>
+                              <p className="mt-2 text-sm text-slate-500">Requests submitted by this customer will appear here automatically.</p>
+                            </div>
+                          ) : (
+                            interacTransferRows.map((row) => (
+                              editingRecordId === row.id ? (
+                                <RecordFormCard
+                                  key={row.id}
+                                  row={row}
+                                  tableLabel="Interac e-Transfer"
+                                  tableConfig={getDataTableConfig('bank_transfers') || activeConfig}
+                                  saving={savingRecordId === row.__source_id}
+                                  deleting={deletingRecordId === row.__source_id}
+                                  allowDelete={!['completed', 'approved'].includes(String(row.status || ''))}
+                                  canRevealSensitive={isViewerAdmin}
+                                  onSave={(editedRow) => handleTransferSave(row, editedRow)}
+                                  onDelete={() => handleInteracDelete(row)}
+                                  onCancel={() => setEditingRecordId(null)}
+                                />
+                              ) : (
+                                <InteracTransferAdminCard
+                                  key={row.id}
+                                  row={row}
+                                  saving={savingRecordId === row.__source_id}
+                                  deleting={deletingRecordId === row.__source_id}
+                                  canRevealSecurityAnswer={isViewerAdmin}
+                                  onStatusChange={(status) => handleInteracStatusChange(row, status)}
+                                  onEdit={() => handleStartEditRecord(row.id)}
+                                  onDelete={() => handleInteracDelete(row)}
+                                />
+                              )
+                            ))
+                          )}
+                        </div>
+                      </section>
                     ) : isWalletsView ? (
                       walletRows.map((row) => (
                         editingRecordId === row.id ? (
@@ -8120,7 +8501,7 @@ export default function CrmAdmin() {
                                 Add transfer
                               </button>
                               <span className="inline-flex w-fit items-center self-start rounded-full border border-amber-200 bg-white px-4 py-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-amber-700 lg:self-auto">
-                                {transferRows.length} rows
+                                {standardTransferRows.length} rows
                               </span>
                             </div>
                           </div>
@@ -8146,13 +8527,13 @@ export default function CrmAdmin() {
                               onCancel={handleCancelCreateRecord}
                             />
                           )}
-                          {transferRows.length === 0 ? (
+                          {standardTransferRows.length === 0 ? (
                             <div className="rounded-2xl border border-dashed border-amber-200 bg-white px-5 py-10 text-center sm:px-6 sm:py-12">
                               <p className="text-sm font-semibold text-slate-900">No transfers yet</p>
                               <p className="mt-2 text-sm text-slate-500">Bank and crypto transfers for this customer will appear here.</p>
                             </div>
                           ) : (
-                            transferRows.map((row) => renderActivityRow(row, 'Transfers', 'transfers'))
+                            standardTransferRows.map((row) => renderActivityRow(row, 'Transfers', 'transfers'))
                           )}
                         </div>
                       </section>
