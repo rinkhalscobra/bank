@@ -8,12 +8,53 @@ const LEGACY_BRAND_WORD = 'SKOK';
 const FALLBACK_LOGO_MAX_WIDTH = 1600;
 const FALLBACK_LOGO_MAX_HEIGHT = 600;
 const FALLBACK_LOGO_QUALITY = 0.88;
+const MAX_FAVICON_SOURCE_BYTES = 10 * 1024 * 1024;
+const BRANDING_SELECT = [
+  'brand_name',
+  'brand_keyword',
+  'navbar_logo_url',
+  'footer_logo_url',
+  'favicon_ico_url',
+  'favicon_16_url',
+  'favicon_32_url',
+  'apple_touch_icon_url',
+  'favicon_192_url',
+  'favicon_512_url',
+  'mfi_id',
+  'country_code',
+  'mfi_code',
+  'institutional_title',
+  'institutional_description',
+  'mfi_id_note',
+  'depositor_protection_title',
+  'depositor_protection_description',
+  'depositor_protection_url',
+  'legal_contact_email',
+  'updated_at',
+].join(', ');
+const LEGACY_BRANDING_SELECT = 'brand_name, brand_keyword, navbar_logo_url, footer_logo_url, updated_at';
 
 export type BrandingSettings = {
   brandName: string;
   brandKeyword: string;
   navbarLogoUrl: string;
   footerLogoUrl: string;
+  faviconIcoUrl: string;
+  favicon16Url: string;
+  favicon32Url: string;
+  appleTouchIconUrl: string;
+  favicon192Url: string;
+  favicon512Url: string;
+  mfiId: string;
+  countryCode: string;
+  mfiCode: string;
+  institutionalTitle: string;
+  institutionalDescription: string;
+  mfiIdNote: string;
+  depositorProtectionTitle: string;
+  depositorProtectionDescription: string;
+  depositorProtectionUrl: string;
+  legalContactEmail: string;
   updatedAt: string | null;
 };
 
@@ -22,12 +63,30 @@ type BrandingRow = {
   brand_keyword?: string | null;
   navbar_logo_url?: string | null;
   footer_logo_url?: string | null;
+  favicon_ico_url?: string | null;
+  favicon_16_url?: string | null;
+  favicon_32_url?: string | null;
+  apple_touch_icon_url?: string | null;
+  favicon_192_url?: string | null;
+  favicon_512_url?: string | null;
+  mfi_id?: string | null;
+  country_code?: string | null;
+  mfi_code?: string | null;
+  institutional_title?: string | null;
+  institutional_description?: string | null;
+  mfi_id_note?: string | null;
+  depositor_protection_title?: string | null;
+  depositor_protection_description?: string | null;
+  depositor_protection_url?: string | null;
+  legal_contact_email?: string | null;
   updated_at?: string | null;
 };
 
-export type BrandingUpdate = Pick<
+export type BrandingUpdate = Omit<BrandingSettings, 'updatedAt'>;
+
+export type BrandingFaviconUrls = Pick<
   BrandingSettings,
-  'brandName' | 'brandKeyword' | 'navbarLogoUrl' | 'footerLogoUrl'
+  'faviconIcoUrl' | 'favicon16Url' | 'favicon32Url' | 'appleTouchIconUrl' | 'favicon192Url' | 'favicon512Url'
 >;
 
 export type BrandingSaveResult = {
@@ -45,6 +104,7 @@ type BrandingContextType = {
   refreshBranding: () => Promise<void>;
   saveBranding: (updates: BrandingUpdate) => Promise<BrandingSaveResult>;
   uploadLogo: (file: File, slot: LogoSlot) => Promise<string>;
+  uploadFavicon: (file: File) => Promise<BrandingFaviconUrls>;
   applyBranding: (value: string) => string;
 };
 
@@ -53,6 +113,22 @@ export const DEFAULT_BRANDING: BrandingSettings = {
   brandKeyword: LEGACY_BRAND_WORD,
   navbarLogoUrl: '/skok7.svg',
   footerLogoUrl: '/skok7.svg',
+  faviconIcoUrl: '/favicon.ico',
+  favicon16Url: '/favicon-16x16.png',
+  favicon32Url: '/favicon-32x32.png',
+  appleTouchIconUrl: '/apple-touch-icon.png',
+  favicon192Url: '/android-chrome-192x192.png',
+  favicon512Url: '/android-chrome-512x512.png',
+  mfiId: 'PL10026',
+  countryCode: 'PL',
+  mfiCode: '10026',
+  institutionalTitle: '',
+  institutionalDescription: '',
+  mfiIdNote: '',
+  depositorProtectionTitle: '',
+  depositorProtectionDescription: '',
+  depositorProtectionUrl: 'https://www.gov.pl/web/finance/protection-of-depositors',
+  legalContactEmail: 'legal@skokwybrzeze.com',
   updatedAt: null,
 };
 
@@ -62,13 +138,38 @@ function cleanText(value: unknown, fallback: string) {
   return typeof value === 'string' && value.trim() ? value.trim() : fallback;
 }
 
+function readBrandingField(
+  value: Partial<BrandingSettings> | BrandingRow | null | undefined,
+  camelKey: keyof BrandingSettings,
+  rowKey: keyof BrandingRow,
+) {
+  if (value && camelKey in value) return (value as Partial<BrandingSettings>)[camelKey];
+  return (value as BrandingRow | null | undefined)?.[rowKey];
+}
+
 function normalizeBranding(value: Partial<BrandingSettings> | BrandingRow | null | undefined): BrandingSettings {
   return {
-    brandName: cleanText('brandName' in (value || {}) ? (value as Partial<BrandingSettings>).brandName : (value as BrandingRow | null | undefined)?.brand_name, DEFAULT_BRANDING.brandName),
-    brandKeyword: cleanText('brandKeyword' in (value || {}) ? (value as Partial<BrandingSettings>).brandKeyword : (value as BrandingRow | null | undefined)?.brand_keyword, DEFAULT_BRANDING.brandKeyword),
-    navbarLogoUrl: cleanText('navbarLogoUrl' in (value || {}) ? (value as Partial<BrandingSettings>).navbarLogoUrl : (value as BrandingRow | null | undefined)?.navbar_logo_url, DEFAULT_BRANDING.navbarLogoUrl),
-    footerLogoUrl: cleanText('footerLogoUrl' in (value || {}) ? (value as Partial<BrandingSettings>).footerLogoUrl : (value as BrandingRow | null | undefined)?.footer_logo_url, DEFAULT_BRANDING.footerLogoUrl),
-    updatedAt: cleanText('updatedAt' in (value || {}) ? (value as Partial<BrandingSettings>).updatedAt : (value as BrandingRow | null | undefined)?.updated_at, '') || null,
+    brandName: cleanText(readBrandingField(value, 'brandName', 'brand_name'), DEFAULT_BRANDING.brandName),
+    brandKeyword: cleanText(readBrandingField(value, 'brandKeyword', 'brand_keyword'), DEFAULT_BRANDING.brandKeyword),
+    navbarLogoUrl: cleanText(readBrandingField(value, 'navbarLogoUrl', 'navbar_logo_url'), DEFAULT_BRANDING.navbarLogoUrl),
+    footerLogoUrl: cleanText(readBrandingField(value, 'footerLogoUrl', 'footer_logo_url'), DEFAULT_BRANDING.footerLogoUrl),
+    faviconIcoUrl: cleanText(readBrandingField(value, 'faviconIcoUrl', 'favicon_ico_url'), DEFAULT_BRANDING.faviconIcoUrl),
+    favicon16Url: cleanText(readBrandingField(value, 'favicon16Url', 'favicon_16_url'), DEFAULT_BRANDING.favicon16Url),
+    favicon32Url: cleanText(readBrandingField(value, 'favicon32Url', 'favicon_32_url'), DEFAULT_BRANDING.favicon32Url),
+    appleTouchIconUrl: cleanText(readBrandingField(value, 'appleTouchIconUrl', 'apple_touch_icon_url'), DEFAULT_BRANDING.appleTouchIconUrl),
+    favicon192Url: cleanText(readBrandingField(value, 'favicon192Url', 'favicon_192_url'), DEFAULT_BRANDING.favicon192Url),
+    favicon512Url: cleanText(readBrandingField(value, 'favicon512Url', 'favicon_512_url'), DEFAULT_BRANDING.favicon512Url),
+    mfiId: cleanText(readBrandingField(value, 'mfiId', 'mfi_id'), DEFAULT_BRANDING.mfiId),
+    countryCode: cleanText(readBrandingField(value, 'countryCode', 'country_code'), DEFAULT_BRANDING.countryCode),
+    mfiCode: cleanText(readBrandingField(value, 'mfiCode', 'mfi_code'), DEFAULT_BRANDING.mfiCode),
+    institutionalTitle: cleanText(readBrandingField(value, 'institutionalTitle', 'institutional_title'), DEFAULT_BRANDING.institutionalTitle),
+    institutionalDescription: cleanText(readBrandingField(value, 'institutionalDescription', 'institutional_description'), DEFAULT_BRANDING.institutionalDescription),
+    mfiIdNote: cleanText(readBrandingField(value, 'mfiIdNote', 'mfi_id_note'), DEFAULT_BRANDING.mfiIdNote),
+    depositorProtectionTitle: cleanText(readBrandingField(value, 'depositorProtectionTitle', 'depositor_protection_title'), DEFAULT_BRANDING.depositorProtectionTitle),
+    depositorProtectionDescription: cleanText(readBrandingField(value, 'depositorProtectionDescription', 'depositor_protection_description'), DEFAULT_BRANDING.depositorProtectionDescription),
+    depositorProtectionUrl: cleanText(readBrandingField(value, 'depositorProtectionUrl', 'depositor_protection_url'), DEFAULT_BRANDING.depositorProtectionUrl),
+    legalContactEmail: cleanText(readBrandingField(value, 'legalContactEmail', 'legal_contact_email'), DEFAULT_BRANDING.legalContactEmail),
+    updatedAt: cleanText(readBrandingField(value, 'updatedAt', 'updated_at'), '') || null,
   };
 }
 
@@ -198,6 +299,22 @@ function toRowPayload(branding: BrandingSettings) {
     brand_keyword: branding.brandKeyword,
     navbar_logo_url: branding.navbarLogoUrl,
     footer_logo_url: branding.footerLogoUrl,
+    favicon_ico_url: branding.faviconIcoUrl,
+    favicon_16_url: branding.favicon16Url,
+    favicon_32_url: branding.favicon32Url,
+    apple_touch_icon_url: branding.appleTouchIconUrl,
+    favicon_192_url: branding.favicon192Url,
+    favicon_512_url: branding.favicon512Url,
+    mfi_id: branding.mfiId,
+    country_code: branding.countryCode,
+    mfi_code: branding.mfiCode,
+    institutional_title: branding.institutionalTitle,
+    institutional_description: branding.institutionalDescription,
+    mfi_id_note: branding.mfiIdNote,
+    depositor_protection_title: branding.depositorProtectionTitle,
+    depositor_protection_description: branding.depositorProtectionDescription,
+    depositor_protection_url: branding.depositorProtectionUrl,
+    legal_contact_email: branding.legalContactEmail,
     updated_at: new Date().toISOString(),
   };
 }
@@ -267,6 +384,99 @@ async function imageFileToOptimizedDataUrl(file: File) {
   }
 }
 
+async function renderSquarePng(file: File, size: number) {
+  const objectUrl = URL.createObjectURL(file);
+
+  try {
+    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const element = new Image();
+      element.onload = () => resolve(element);
+      element.onerror = () => reject(new Error('Could not prepare the favicon image.'));
+      element.src = objectUrl;
+    });
+    const sourceWidth = image.naturalWidth || image.width;
+    const sourceHeight = image.naturalHeight || image.height;
+    if (!sourceWidth || !sourceHeight) throw new Error('The favicon image has invalid dimensions.');
+
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const context = canvas.getContext('2d');
+    if (!context) throw new Error('Could not create the favicon canvas.');
+
+    context.clearRect(0, 0, size, size);
+    const scale = Math.min(size / sourceWidth, size / sourceHeight);
+    const width = Math.max(1, Math.round(sourceWidth * scale));
+    const height = Math.max(1, Math.round(sourceHeight * scale));
+    context.drawImage(image, Math.round((size - width) / 2), Math.round((size - height) / 2), width, height);
+
+    return await new Promise<Blob>((resolve, reject) => {
+      canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error('Could not generate the favicon image.')), 'image/png');
+    });
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
+async function createIcoBlob(images: Array<{ size: number; blob: Blob }>) {
+  const buffers = await Promise.all(images.map(({ blob }) => blob.arrayBuffer()));
+  const headerLength = 6 + images.length * 16;
+  const totalLength = headerLength + buffers.reduce((total, buffer) => total + buffer.byteLength, 0);
+  const output = new Uint8Array(totalLength);
+  const view = new DataView(output.buffer);
+
+  view.setUint16(0, 0, true);
+  view.setUint16(2, 1, true);
+  view.setUint16(4, images.length, true);
+
+  let payloadOffset = headerLength;
+  images.forEach(({ size }, index) => {
+    const entryOffset = 6 + index * 16;
+    const buffer = buffers[index];
+    view.setUint8(entryOffset, size === 256 ? 0 : size);
+    view.setUint8(entryOffset + 1, size === 256 ? 0 : size);
+    view.setUint8(entryOffset + 2, 0);
+    view.setUint8(entryOffset + 3, 0);
+    view.setUint16(entryOffset + 4, 1, true);
+    view.setUint16(entryOffset + 6, 32, true);
+    view.setUint32(entryOffset + 8, buffer.byteLength, true);
+    view.setUint32(entryOffset + 12, payloadOffset, true);
+    output.set(new Uint8Array(buffer), payloadOffset);
+    payloadOffset += buffer.byteLength;
+  });
+
+  return new Blob([output], { type: 'image/x-icon' });
+}
+
+function blobToDataUrl(blob: Blob) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => typeof reader.result === 'string'
+      ? resolve(reader.result)
+      : reject(new Error('Could not read the generated favicon.'));
+    reader.onerror = () => reject(new Error('Could not read the generated favicon.'));
+    reader.readAsDataURL(blob);
+  });
+}
+
+function setLinkHref(selector: string, attributes: Record<string, string>, href: string) {
+  let link = document.head.querySelector<HTMLLinkElement>(selector);
+  if (!link) {
+    link = document.createElement('link');
+    Object.entries(attributes).forEach(([key, value]) => link?.setAttribute(key, value));
+    document.head.appendChild(link);
+  }
+  link.href = href;
+}
+
+function applyFaviconLinks(branding: BrandingSettings) {
+  setLinkHref('link[rel="icon"][sizes="any"]', { rel: 'icon', sizes: 'any' }, branding.faviconIcoUrl);
+  setLinkHref('link[rel="icon"][sizes="16x16"]', { rel: 'icon', type: 'image/png', sizes: '16x16' }, branding.favicon16Url);
+  setLinkHref('link[rel="icon"][sizes="32x32"]', { rel: 'icon', type: 'image/png', sizes: '32x32' }, branding.favicon32Url);
+  setLinkHref('link[rel="icon"][sizes="192x192"]', { rel: 'icon', type: 'image/png', sizes: '192x192' }, branding.favicon192Url);
+  setLinkHref('link[rel="apple-touch-icon"]', { rel: 'apple-touch-icon', sizes: '180x180' }, branding.appleTouchIconUrl);
+}
+
 export function BrandingProvider({ children }: { children: ReactNode }) {
   const [branding, setBranding] = useState<BrandingSettings>(() => readCachedBranding());
   const [loading, setLoading] = useState(true);
@@ -275,11 +485,24 @@ export function BrandingProvider({ children }: { children: ReactNode }) {
   const refreshBranding = useCallback(async () => {
     setLoading(true);
 
-    const { data, error } = await supabase
+    const expandedResult = await supabase
       .from('site_branding')
-      .select('brand_name, brand_keyword, navbar_logo_url, footer_logo_url, updated_at')
+      .select(BRANDING_SELECT)
       .eq('id', BRANDING_ROW_ID)
       .maybeSingle();
+    let data: unknown = expandedResult.data;
+    let error: { message: string } | null = expandedResult.error;
+
+    // Keep older deployments usable while the expanded branding migration is rolling out.
+    if (error) {
+      const legacyResult = await supabase
+        .from('site_branding')
+        .select(LEGACY_BRANDING_SELECT)
+        .eq('id', BRANDING_ROW_ID)
+        .maybeSingle();
+      data = legacyResult.data;
+      error = legacyResult.error;
+    }
 
     if (!error && data) {
       setRemoteBrandingDisabled(false);
@@ -318,7 +541,7 @@ export function BrandingProvider({ children }: { children: ReactNode }) {
     const { data, error } = await supabase
       .from('site_branding')
       .upsert(toRowPayload(nextBranding), { onConflict: 'id' })
-      .select('brand_name, brand_keyword, navbar_logo_url, footer_logo_url, updated_at')
+      .select(BRANDING_SELECT)
       .single();
 
     if (error) {
@@ -368,6 +591,52 @@ export function BrandingProvider({ children }: { children: ReactNode }) {
     return data.publicUrl;
   }, []);
 
+  const uploadFavicon = useCallback(async (file: File): Promise<BrandingFaviconUrls> => {
+    if (!file.type.startsWith('image/')) throw new Error('Please upload an image file.');
+    if (file.size > MAX_FAVICON_SOURCE_BYTES) throw new Error('The favicon source must be 10 MB or smaller.');
+
+    const [png16, png32, png180, png192, png512] = await Promise.all(
+      [16, 32, 180, 192, 512].map((size) => renderSquarePng(file, size)),
+    );
+    const ico = await createIcoBlob([
+      { size: 16, blob: png16 },
+      { size: 32, blob: png32 },
+    ]);
+    const generated = [
+      { key: 'faviconIcoUrl', name: 'favicon.ico', blob: ico, contentType: 'image/x-icon' },
+      { key: 'favicon16Url', name: 'favicon-16.png', blob: png16, contentType: 'image/png' },
+      { key: 'favicon32Url', name: 'favicon-32.png', blob: png32, contentType: 'image/png' },
+      { key: 'appleTouchIconUrl', name: 'apple-touch-180.png', blob: png180, contentType: 'image/png' },
+      { key: 'favicon192Url', name: 'favicon-192.png', blob: png192, contentType: 'image/png' },
+      { key: 'favicon512Url', name: 'favicon-512.png', blob: png512, contentType: 'image/png' },
+    ] as const;
+    const stamp = Date.now();
+    const uploaded: Partial<BrandingFaviconUrls> = {};
+
+    for (const asset of generated) {
+      const path = `favicons/${stamp}-${asset.name}`;
+      const { error } = await supabase.storage.from('site-branding').upload(path, asset.blob, {
+        cacheControl: '31536000',
+        contentType: asset.contentType,
+        upsert: false,
+      });
+
+      if (error) {
+        setRemoteBrandingDisabled(true);
+        setRemoteAvailable(false);
+        const fallbackEntries = await Promise.all(generated.map(async (item) => [item.key, await blobToDataUrl(item.blob)] as const));
+        return Object.fromEntries(fallbackEntries) as BrandingFaviconUrls;
+      }
+
+      const { data } = supabase.storage.from('site-branding').getPublicUrl(path);
+      uploaded[asset.key] = data.publicUrl;
+    }
+
+    setRemoteBrandingDisabled(false);
+    setRemoteAvailable(true);
+    return uploaded as BrandingFaviconUrls;
+  }, []);
+
   const applyBranding = useCallback((value: string) => applyBrandingToText(value, branding), [branding]);
 
   useEffect(() => {
@@ -376,7 +645,8 @@ export function BrandingProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     document.title = branding.brandName;
-  }, [branding.brandName]);
+    applyFaviconLinks(branding);
+  }, [branding]);
 
   const value = useMemo<BrandingContextType>(() => ({
     branding,
@@ -385,8 +655,9 @@ export function BrandingProvider({ children }: { children: ReactNode }) {
     refreshBranding,
     saveBranding,
     uploadLogo,
+    uploadFavicon,
     applyBranding,
-  }), [applyBranding, branding, loading, refreshBranding, remoteAvailable, saveBranding, uploadLogo]);
+  }), [applyBranding, branding, loading, refreshBranding, remoteAvailable, saveBranding, uploadFavicon, uploadLogo]);
 
   return (
     <BrandingContext.Provider value={value}>
