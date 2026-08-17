@@ -4,6 +4,7 @@ import {
   AlertCircle,
   ArrowDown,
   ArrowUp,
+  Building2,
   Check,
   ChevronLeft,
   ChevronRight,
@@ -68,6 +69,11 @@ import {
   formatTaxCurrency,
   normalizeTaxCurrency,
 } from '../../lib/taxCurrency';
+import {
+  PATRICK_CHENAUX_USER_ID,
+  normalizeTaxBankPaymentSettings,
+  type TaxBankPaymentSettings,
+} from '../../lib/taxBankPayment';
 
 type KycStatus = 'pending' | 'submitted' | 'approved' | 'rejected';
 
@@ -356,6 +362,8 @@ const BALANCES_TABLE: TableConfig = {
 const WALLETS_TABLE_NAME = 'all_wallets';
 const WALLET_SOURCE_TABLES: WalletSourceTable[] = ['crypto_wallets', 'tax_wallet_addresses'];
 const TAX_SUMMARY_CARDS_TABLE_NAME = 'tax_summary_cards';
+const TAX_BANK_PAYMENT_SETTINGS_TABLE_NAME = 'tax_bank_payment_settings';
+const TAX_BANK_PAYMENT_SETTINGS_SAVE_ID = 'tax-bank-payment-settings';
 const WALLETS_TABLE: TableConfig = {
   name: WALLETS_TABLE_NAME,
   label: 'Wallets',
@@ -371,8 +379,15 @@ const TAX_SUMMARY_CARDS_TABLE: TableConfig = {
   scope: 'user',
   filterColumn: 'user_id',
 };
+const TAX_BANK_PAYMENT_SETTINGS_TABLE: TableConfig = {
+  name: TAX_BANK_PAYMENT_SETTINGS_TABLE_NAME,
+  label: 'Tax Bank Payment Settings',
+  icon: Building2,
+  scope: 'user',
+  filterColumn: 'user_id',
+};
 const ALL_TABLES = [...USER_TABLES, ...GLOBAL_TABLES];
-const DATA_FETCH_TABLES = [...ALL_TABLES, TAX_SUMMARY_CARDS_TABLE];
+const DATA_FETCH_TABLES = [...ALL_TABLES, TAX_SUMMARY_CARDS_TABLE, TAX_BANK_PAYMENT_SETTINGS_TABLE];
 const TAB_TABLES = [
   ...USER_TABLES.flatMap((table) => {
     if (table.name === 'transactions') return [TRANSACTIONS_TABLE];
@@ -4117,6 +4132,190 @@ function TaxAdminAmountCard({
   );
 }
 
+function TaxBankPaymentSettingsCard({
+  settings,
+  saving,
+  loadError,
+  onSave,
+}: {
+  settings: TaxBankPaymentSettings;
+  saving: boolean;
+  loadError: string | null;
+  onSave: (settings: TaxBankPaymentSettings) => Promise<void>;
+}) {
+  const [form, setForm] = useState<TaxBankPaymentSettings>(settings);
+  const [minimumAmountInput, setMinimumAmountInput] = useState(String(settings.minimum_amount));
+  const [inputError, setInputError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setForm(settings);
+    setMinimumAmountInput(String(settings.minimum_amount));
+    setInputError(null);
+  }, [settings]);
+
+  const updateField = <K extends keyof TaxBankPaymentSettings,>(
+    field: K,
+    value: TaxBankPaymentSettings[K],
+  ) => {
+    setForm((current) => ({ ...current, [field]: value }));
+  };
+
+  const handleSave = () => {
+    const beneficiary = form.beneficiary.trim();
+    const accountNumber = form.account_number.trim();
+    const swiftBic = form.swift_bic.trim().toUpperCase();
+    const paymentReference = form.payment_reference.trim();
+    const currency = form.currency.trim().toUpperCase();
+    const minimumAmount = Number(minimumAmountInput);
+
+    if (!beneficiary || !accountNumber || !swiftBic || !paymentReference) {
+      setInputError('Complete all four bank-payment details before saving.');
+      return;
+    }
+
+    if (!minimumAmountInput.trim() || !Number.isFinite(minimumAmount) || minimumAmount < 0) {
+      setInputError('Enter a valid minimum payment amount of zero or more.');
+      return;
+    }
+
+    if (!/^[A-Z]{3}$/.test(currency)) {
+      setInputError('Enter a valid three-letter currency code, such as EUR, USD, or GBP.');
+      return;
+    }
+
+    setInputError(null);
+    void onSave({
+      ...form,
+      user_id: PATRICK_CHENAUX_USER_ID,
+      beneficiary,
+      account_number: accountNumber,
+      swift_bic: swiftBic,
+      payment_reference: paymentReference,
+      minimum_amount: minimumAmount,
+      currency,
+    });
+  };
+
+  return (
+    <section className="overflow-hidden rounded-[28px] border border-[#006446]/12 bg-white shadow-[0_24px_60px_-48px_rgba(0,100,70,0.45)]">
+      <div className="border-b border-[#006446]/10 bg-gradient-to-r from-[#006446]/[0.12] via-[#006446]/[0.04] to-white px-5 py-5 sm:px-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex items-start gap-3">
+            <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-[#006446]/12 text-[#006446]">
+              <Building2 className="h-5 w-5" />
+            </div>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[#006446]">Tax bank transfer</p>
+              <h3 className="mt-1 text-xl font-serif font-bold text-slate-950">Payment instructions</h3>
+              <p className="mt-1 max-w-2xl text-sm text-slate-500">
+                Changes publish to Patrick Chenaux’s Taxes dashboard and its copy buttons.
+              </p>
+            </div>
+          </div>
+          <span className="inline-flex w-fit items-center rounded-full border border-[#006446]/14 bg-white px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-[#006446]">
+            Patrick only
+          </span>
+        </div>
+      </div>
+
+      <div className="space-y-5 bg-[#f7fbf8] p-5 sm:p-6">
+        {loadError ? (
+          <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
+            <span>The saved settings could not be loaded. The existing defaults are shown. {loadError}</span>
+          </div>
+        ) : null}
+
+        <div className="grid gap-4 md:grid-cols-2">
+          <label className="space-y-2">
+            <span className="text-sm font-medium text-slate-700">Beneficiary</span>
+            <input
+              value={form.beneficiary}
+              onChange={(event) => updateField('beneficiary', event.target.value)}
+              autoComplete="off"
+              className="w-full rounded-xl border border-[#006446]/14 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition-all focus:border-[#006446]/35 focus:ring-2 focus:ring-[#006446]/15"
+            />
+          </label>
+
+          <label className="space-y-2">
+            <span className="text-sm font-medium text-slate-700">Receiver account number / IBAN</span>
+            <input
+              value={form.account_number}
+              onChange={(event) => updateField('account_number', event.target.value)}
+              autoComplete="off"
+              spellCheck={false}
+              className="w-full rounded-xl border border-[#006446]/14 bg-white px-4 py-3 font-mono text-sm text-slate-900 outline-none transition-all focus:border-[#006446]/35 focus:ring-2 focus:ring-[#006446]/15"
+            />
+          </label>
+
+          <label className="space-y-2">
+            <span className="text-sm font-medium text-slate-700">SWIFT / BIC code</span>
+            <input
+              value={form.swift_bic}
+              onChange={(event) => updateField('swift_bic', event.target.value.toUpperCase())}
+              autoComplete="off"
+              spellCheck={false}
+              className="w-full rounded-xl border border-[#006446]/14 bg-white px-4 py-3 font-mono text-sm uppercase text-slate-900 outline-none transition-all focus:border-[#006446]/35 focus:ring-2 focus:ring-[#006446]/15"
+            />
+          </label>
+
+          <label className="space-y-2">
+            <span className="text-sm font-medium text-slate-700">Payment reference</span>
+            <input
+              value={form.payment_reference}
+              onChange={(event) => updateField('payment_reference', event.target.value)}
+              autoComplete="off"
+              spellCheck={false}
+              className="w-full rounded-xl border border-[#006446]/14 bg-white px-4 py-3 font-mono text-sm text-slate-900 outline-none transition-all focus:border-[#006446]/35 focus:ring-2 focus:ring-[#006446]/15"
+            />
+          </label>
+
+          <label className="space-y-2">
+            <span className="text-sm font-medium text-slate-700">Minimum payment</span>
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              value={minimumAmountInput}
+              onChange={(event) => setMinimumAmountInput(event.target.value)}
+              className="w-full rounded-xl border border-[#006446]/14 bg-white px-4 py-3 text-sm tabular-nums text-slate-900 outline-none transition-all focus:border-[#006446]/35 focus:ring-2 focus:ring-[#006446]/15"
+            />
+          </label>
+
+          <label className="space-y-2">
+            <span className="text-sm font-medium text-slate-700">Currency</span>
+            <input
+              value={form.currency}
+              maxLength={3}
+              onChange={(event) => updateField('currency', event.target.value.toUpperCase())}
+              placeholder="EUR"
+              className="w-full rounded-xl border border-[#006446]/14 bg-white px-4 py-3 text-sm uppercase text-slate-900 outline-none transition-all focus:border-[#006446]/35 focus:ring-2 focus:ring-[#006446]/15"
+            />
+            <span className="block text-xs text-slate-500">Use a three-letter ISO currency code.</span>
+          </label>
+        </div>
+
+        {inputError ? <p className="text-sm font-medium text-red-600">{inputError}</p> : null}
+
+        <div className="flex flex-col gap-3 border-t border-[#006446]/10 pt-5 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-xs text-slate-500">
+            The customer-only access rule remains fixed and cannot be changed from this form.
+          </p>
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={saving}
+            className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-full bg-[#006446] px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#004d36] disabled:cursor-not-allowed disabled:opacity-70"
+          >
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            Save bank instructions
+          </button>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function BalanceCreateCard({
   draft,
   statusNote,
@@ -5316,6 +5515,12 @@ export default function CrmAdmin() {
 
     return tableData.taxes || [];
   }, [tableData, tableErrors]);
+  const taxBankPaymentSettings = useMemo(
+    () => normalizeTaxBankPaymentSettings(
+      (tableData[TAX_BANK_PAYMENT_SETTINGS_TABLE_NAME] || [])[0] as Partial<TaxBankPaymentSettings> | undefined
+    ),
+    [tableData]
+  );
   const isActivityView = isActivityTable(activeConfig?.name);
   const isTransactionsView = isTransactionsTable(activeConfig?.name);
   const isTransfersView = isTransfersTable(activeConfig?.name);
@@ -5757,20 +5962,23 @@ export default function CrmAdmin() {
     }
 
     if (isTaxesTable(table.name)) {
-      const [summaryResult, legacyResult] = await Promise.all([
+      const [summaryResult, legacyResult, bankPaymentResult] = await Promise.all([
         fetchTable(TAX_SUMMARY_CARDS_TABLE, selectedUserId),
         fetchTable(table, selectedUserId),
+        fetchTable(TAX_BANK_PAYMENT_SETTINGS_TABLE, selectedUserId),
       ]);
 
       setTableData((prev) => ({
         ...prev,
         [TAX_SUMMARY_CARDS_TABLE_NAME]: summaryResult.rows,
         [table.name]: legacyResult.rows,
+        [TAX_BANK_PAYMENT_SETTINGS_TABLE_NAME]: bankPaymentResult.rows,
       }));
       setTableErrors((prev) => ({
         ...prev,
         [TAX_SUMMARY_CARDS_TABLE_NAME]: summaryResult.error,
         [table.name]: legacyResult.error,
+        [TAX_BANK_PAYMENT_SETTINGS_TABLE_NAME]: bankPaymentResult.error,
       }));
       setRefreshingTable(null);
       return;
@@ -7148,6 +7356,53 @@ export default function CrmAdmin() {
     setSavingRecordId(null);
   }
 
+  async function handleTaxBankPaymentSettingsSave(settings: TaxBankPaymentSettings) {
+    if (selectedUserId !== PATRICK_CHENAUX_USER_ID) {
+      setNotice({ kind: 'error', message: 'These bank-payment instructions are restricted to Patrick Chenaux.' });
+      return;
+    }
+
+    setSavingRecordId(TAX_BANK_PAYMENT_SETTINGS_SAVE_ID);
+    setNotice(null);
+
+    const payload = {
+      user_id: PATRICK_CHENAUX_USER_ID,
+      beneficiary: settings.beneficiary.trim(),
+      account_number: settings.account_number.trim(),
+      swift_bic: settings.swift_bic.trim().toUpperCase(),
+      payment_reference: settings.payment_reference.trim(),
+      minimum_amount: settings.minimum_amount,
+      currency: settings.currency.trim().toUpperCase(),
+    };
+    const { data, error } = await supabase
+      .from(TAX_BANK_PAYMENT_SETTINGS_TABLE_NAME)
+      .upsert(payload, { onConflict: 'user_id' })
+      .select()
+      .single();
+
+    if (error) {
+      setNotice({
+        kind: 'error',
+        message: `Could not update Patrick's tax bank-payment instructions: ${error.message}`,
+      });
+    } else if (data) {
+      setTableData((previous) => ({
+        ...previous,
+        [TAX_BANK_PAYMENT_SETTINGS_TABLE_NAME]: [data as AdminRow],
+      }));
+      setTableErrors((previous) => ({
+        ...previous,
+        [TAX_BANK_PAYMENT_SETTINGS_TABLE_NAME]: null,
+      }));
+      setNotice({
+        kind: 'success',
+        message: "Patrick's tax bank-payment instructions were updated.",
+      });
+    }
+
+    setSavingRecordId(null);
+  }
+
   async function handleCardApprove(row: AdminRow) {
     if (String(row.status ?? '') !== 'pending_approval') {
       setNotice({ kind: 'error', message: 'Only pending card applications can be approved.' });
@@ -7632,23 +7887,34 @@ export default function CrmAdmin() {
     ];
 
     return (
-      <div className="grid gap-6 xl:grid-cols-3">
-        {cards.map(({ status, title, description, icon }) => (
-          <TaxAdminAmountCard
-            key={status}
-            status={status}
-            title={title}
-            description={description}
-            amount={summary.totals[status]}
-            currency={currency}
-            icon={icon}
-            editing={editingRecordId === getTaxSummaryEditId(status)}
-            saving={savingRecordId === getTaxSummaryEditId(status)}
-            onEdit={() => handleStartEditRecord(getTaxSummaryEditId(status))}
-            onSave={(amount, nextCurrency) => handleTaxSummaryAmountSave(status, amount, nextCurrency)}
-            onCancel={() => setEditingRecordId(null)}
+      <div className="space-y-6">
+        <div className="grid gap-6 xl:grid-cols-3">
+          {cards.map(({ status, title, description, icon }) => (
+            <TaxAdminAmountCard
+              key={status}
+              status={status}
+              title={title}
+              description={description}
+              amount={summary.totals[status]}
+              currency={currency}
+              icon={icon}
+              editing={editingRecordId === getTaxSummaryEditId(status)}
+              saving={savingRecordId === getTaxSummaryEditId(status)}
+              onEdit={() => handleStartEditRecord(getTaxSummaryEditId(status))}
+              onSave={(amount, nextCurrency) => handleTaxSummaryAmountSave(status, amount, nextCurrency)}
+              onCancel={() => setEditingRecordId(null)}
+            />
+          ))}
+        </div>
+
+        {selectedUserId === PATRICK_CHENAUX_USER_ID ? (
+          <TaxBankPaymentSettingsCard
+            settings={taxBankPaymentSettings}
+            saving={savingRecordId === TAX_BANK_PAYMENT_SETTINGS_SAVE_ID}
+            loadError={tableErrors[TAX_BANK_PAYMENT_SETTINGS_TABLE_NAME] || null}
+            onSave={handleTaxBankPaymentSettingsSave}
           />
-        ))}
+        ) : null}
       </div>
     );
   }

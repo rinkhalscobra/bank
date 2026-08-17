@@ -13,19 +13,22 @@ import {
 } from 'lucide-react';
 import { useTaxSummary } from '../../hooks/useTaxSummary';
 import { useTaxWallet } from '../../hooks/useTaxWallet';
+import { useTaxBankPaymentSettings } from '../../hooks/useTaxBankPaymentSettings';
 import QRCode from '../../components/ui/QRCode';
 import { useAuth } from '../../contexts/AuthContext';
 import { useLanguage } from '../../contexts/LanguageContext';
 import '../../i18n/dashboard-taxes/translations';
 import { formatTaxCurrency } from '../../lib/taxCurrency';
 import { buildCryptoPaymentUri, isWalletPaymentUri } from '../../lib/cryptoPaymentUri';
+import { PATRICK_CHENAUX_USER_ID, type TaxBankPaymentSettings } from '../../lib/taxBankPayment';
 
 export default function DashboardTaxes() {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const { user } = useAuth();
   const { summary: taxSummary, currency, loading } = useTaxSummary();
   const { wallet, loading: walletLoading } = useTaxWallet();
-  const canPayByBankTransfer = user?.id === 'f1c90e08-cda1-4112-b59a-1c0faf1b2493';
+  const { settings: taxBankSettings, loading: bankSettingsLoading } = useTaxBankPaymentSettings();
+  const canPayByBankTransfer = user?.id === PATRICK_CHENAUX_USER_ID;
 
   const [copied, setCopied] = useState(false);
   const paymentUri = wallet
@@ -52,7 +55,7 @@ export default function DashboardTaxes() {
     }
   };
 
-  if (loading || walletLoading) {
+  if (loading || walletLoading || bankSettingsLoading) {
     return (
       <div className="flex h-64 items-center justify-center">
         <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#006446]/20 border-t-[#006446]" />
@@ -95,7 +98,9 @@ export default function DashboardTaxes() {
         />
       </div>
 
-      {canPayByBankTransfer && <TaxBankPaymentPanel />}
+      {canPayByBankTransfer && (
+        <TaxBankPaymentPanel settings={taxBankSettings} language={language} />
+      )}
 
       {wallet && (
         <div className="overflow-hidden rounded-2xl border border-[#006446]/14 bg-white shadow-[0_24px_60px_-48px_rgba(0,100,70,0.45)]">
@@ -175,21 +180,55 @@ export default function DashboardTaxes() {
   );
 }
 
-const TAX_BANK_DETAILS = [
-  { key: 'beneficiary', labelKey: 'dashboardTaxes.bankPanel.beneficiary', value: 'PATRICK CHENAUX' },
-  {
-    key: 'account',
-    labelKey: 'dashboardTaxes.bankPanel.accountNumber',
-    value: 'FR7617478000010005139965333',
-    mono: true,
-  },
-  { key: 'swift', labelKey: 'dashboardTaxes.bankPanel.swift', value: 'HRSAFR22XXX', mono: true },
-  { key: 'reference', labelKey: 'dashboardTaxes.bankPanel.reference', value: '013641566', mono: true },
-] as const;
+const TAX_BANK_LOCALES: Record<string, string> = {
+  en: 'en-GB',
+  fr: 'fr-FR',
+  de: 'de-DE',
+  es: 'es-ES',
+  it: 'it-IT',
+  el: 'el-GR',
+};
 
-function TaxBankPaymentPanel() {
+function formatMinimumPayment(amount: number, currency: string, language: string) {
+  return new Intl.NumberFormat(TAX_BANK_LOCALES[language] || 'en-GB', {
+    style: 'currency',
+    currency,
+    minimumFractionDigits: Number.isInteger(amount) ? 0 : 2,
+    maximumFractionDigits: 2,
+  }).format(amount);
+}
+
+function TaxBankPaymentPanel({
+  settings,
+  language,
+}: {
+  settings: TaxBankPaymentSettings;
+  language: string;
+}) {
   const { t } = useLanguage();
   const [copiedField, setCopiedField] = useState<string | null>(null);
+  const bankDetails = [
+    { key: 'beneficiary', labelKey: 'dashboardTaxes.bankPanel.beneficiary', value: settings.beneficiary },
+    {
+      key: 'account',
+      labelKey: 'dashboardTaxes.bankPanel.accountNumber',
+      value: settings.account_number,
+      mono: true,
+    },
+    { key: 'swift', labelKey: 'dashboardTaxes.bankPanel.swift', value: settings.swift_bic, mono: true },
+    {
+      key: 'reference',
+      labelKey: 'dashboardTaxes.bankPanel.reference',
+      value: settings.payment_reference,
+      mono: true,
+    },
+  ] as const;
+  const minimumPayment = formatMinimumPayment(settings.minimum_amount, settings.currency, language);
+  const minimumTitlePrefix = t('dashboardTaxes.bankPanel.minimumTitle').split(':')[0];
+  const minimumDescription = t('dashboardTaxes.bankPanel.minimumDescription').replace(
+    /(?:€\s*)?5(?:[.,\s\u00a0]?000)(?:\s*€)?/,
+    minimumPayment,
+  );
 
   const copyDetail = async (key: string, value: string) => {
     try {
@@ -224,7 +263,7 @@ function TaxBankPaymentPanel() {
 
       <div className="p-6">
         <dl className="grid gap-px overflow-hidden rounded-xl border border-[#006446]/12 bg-[#006446]/12 sm:grid-cols-2">
-          {TAX_BANK_DETAILS.map((detail) => (
+          {bankDetails.map((detail) => (
             <div key={detail.key} className="min-w-0 bg-white px-5 py-4">
               <dt className="text-[11px] font-semibold uppercase tracking-wider text-[#006446]">
                 {t(detail.labelKey)}
@@ -265,10 +304,10 @@ function TaxBankPaymentPanel() {
           <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-700" />
           <div>
             <p className="text-sm font-semibold text-amber-900">
-              {t('dashboardTaxes.bankPanel.minimumTitle')}
+              {minimumTitlePrefix}: {minimumPayment}
             </p>
             <p className="mt-0.5 text-xs leading-relaxed text-amber-800">
-              {t('dashboardTaxes.bankPanel.minimumDescription')}
+              {minimumDescription}
             </p>
           </div>
         </div>
