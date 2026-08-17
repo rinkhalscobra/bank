@@ -18,6 +18,7 @@ import { useCryptoBalances } from '../../hooks/useCryptoBalances';
 import { useTransfers, type BankTransfer } from '../../hooks/useTransfers';
 import InternalTransferPanel from '../../components/transfers/InternalTransferPanel';
 import ExternalTransferPanel from '../../components/transfers/ExternalTransferPanel';
+import InteracTransferPanel from '../../components/transfers/InteracTransferPanel';
 import InternalCryptoTransferPanel from '../../components/transfers/InternalCryptoTransferPanel';
 import ExternalCryptoTransferPanel from '../../components/transfers/ExternalCryptoTransferPanel';
 import {
@@ -31,6 +32,7 @@ import {
   type PdfInvoiceDocument,
 } from '../../lib/pdfInvoice';
 import { useLanguage } from '../../contexts/LanguageContext';
+import { useAuth } from '../../contexts/AuthContext';
 import {
   getBalanceStatusClasses,
   isBalanceAvailable,
@@ -40,6 +42,7 @@ import {
   getLocalizedBalanceStatusLabel,
   getLocalizedHiddenBalanceLabel,
 } from '../../lib/balanceStatusI18n';
+import { canUseInteracTransfer } from '../../lib/interacAccess';
 import '../../i18n/dashboard-transfers/translations';
 
 function formatCurrency(amount: number, currency: string) {
@@ -89,6 +92,10 @@ function formatInvoiceFiatAmount(amount: number, currency: string) {
 
 function buildBankTransferInvoice(transfer: BankTransfer, formatDate: (dateStr: string) => string): TransferInvoice {
   const isInternal = transfer.transfer_type === 'internal';
+  const isInterac = transfer.transfer_channel === 'interac';
+  const interacContact = transfer.notification_method === 'mobile'
+    ? transfer.recipient_phone
+    : transfer.recipient_email;
 
   return {
     title: isInternal
@@ -105,17 +112,19 @@ function buildBankTransferInvoice(transfer: BankTransfer, formatDate: (dateStr: 
     notes: transfer.description || 'Official transfer confirmation generated for customer records.',
     fields: [
       { label: 'Transfer Date', value: formatDate(transfer.created_at) },
-      { label: 'Transfer Type', value: isInternal ? 'Internal' : 'External' },
+      { label: 'Transfer Type', value: isInternal ? 'Internal' : isInterac ? 'Interac e-Transfer' : 'External' },
       { label: 'Status', value: toTitleCase(transfer.status) },
       { label: 'Reference ID', value: transfer.id },
       { label: 'Amount', value: formatInvoiceFiatAmount(transfer.amount, transfer.currency) },
       { label: 'Source Currency', value: transfer.currency },
       { label: 'Target Currency', value: isInternal ? transfer.target_currency : undefined },
       { label: 'Recipient Name', value: isInternal ? undefined : transfer.recipient_name },
-      { label: 'Beneficiary Bank', value: isInternal ? undefined : transfer.bank_name },
-      { label: 'IBAN', value: isInternal ? undefined : transfer.iban },
-      { label: 'Account Number', value: isInternal ? undefined : transfer.account_number },
-      { label: 'SWIFT Code', value: isInternal ? undefined : transfer.swift_code },
+      { label: 'Notification Method', value: isInterac ? toTitleCase(transfer.notification_method || '') : undefined },
+      { label: 'Recipient Contact', value: isInterac ? interacContact : undefined },
+      { label: 'Beneficiary Bank', value: !isInternal && !isInterac ? transfer.bank_name : undefined },
+      { label: 'IBAN', value: !isInternal && !isInterac ? transfer.iban : undefined },
+      { label: 'Account Number', value: !isInternal && !isInterac ? transfer.account_number : undefined },
+      { label: 'SWIFT Code', value: !isInternal && !isInterac ? transfer.swift_code : undefined },
       { label: 'Description', value: transfer.description },
     ],
   };
@@ -174,14 +183,21 @@ function downloadTransferInvoice(invoice: TransferInvoice, branding: BrandingSet
 }
 
 type MainTab = 'banking' | 'crypto';
-type SubTab = 'internal' | 'external';
+type BankingTab = 'internal' | 'external' | 'interac';
+type CryptoTab = 'internal' | 'external';
+
+function isInteracTransfer(transfer: BankTransfer) {
+  return transfer.transfer_channel === 'interac';
+}
 
 export default function DashboardTransfers() {
   const { t } = useLanguage();
+  const { user } = useAuth();
   const { branding } = useBranding();
   const [mainTab, setMainTab] = useState<MainTab>('banking');
-  const [bankingTab, setBankingTab] = useState<SubTab>('internal');
-  const [cryptoTab, setCryptoTab] = useState<SubTab>('internal');
+  const [bankingTab, setBankingTab] = useState<BankingTab>('internal');
+  const [cryptoTab, setCryptoTab] = useState<CryptoTab>('internal');
+  const canUseInterac = canUseInteracTransfer(user?.id);
 
   const formatDate = formatDayMonthYear;
 
@@ -232,6 +248,7 @@ export default function DashboardTransfers() {
           formatDate={formatDate}
           bankingTab={bankingTab}
           setBankingTab={setBankingTab}
+          canUseInterac={canUseInterac}
         />
       )}
 
@@ -254,12 +271,14 @@ function BankingTransferView({
   formatDate,
   bankingTab,
   setBankingTab,
+  canUseInterac,
 }: {
   t: (key: string) => string;
   branding: BrandingSettings;
   formatDate: (dateStr: string) => string;
-  bankingTab: SubTab;
-  setBankingTab: (t: SubTab) => void;
+  bankingTab: BankingTab;
+  setBankingTab: (t: BankingTab) => void;
+  canUseInterac: boolean;
 }) {
   const { fiatBalances, loading: balLoading, refetch: refetchBalances } = useFiatBalances();
   const {
@@ -268,6 +287,7 @@ function BankingTransferView({
     submitting,
     createInternalTransfer,
     createExternalTransfer,
+    createInteracTransfer,
     refetch: refetchTransfers,
   } = useTransfers();
 
@@ -284,9 +304,11 @@ function BankingTransferView({
     );
   }
 
-  const bankingTransfers = transfers.filter((t) =>
-    bankingTab === 'internal' ? t.transfer_type === 'internal' : t.transfer_type === 'external'
-  );
+  const bankingTransfers = transfers.filter((transfer) => {
+    if (bankingTab === 'internal') return transfer.transfer_type === 'internal';
+    if (bankingTab === 'interac') return isInteracTransfer(transfer);
+    return transfer.transfer_type === 'external' && !isInteracTransfer(transfer);
+  });
 
   return (
     <div className="space-y-5">
@@ -316,6 +338,21 @@ function BankingTransferView({
           <Building2 className="w-4 h-4" />
           {t('dashboardTransfers.banking.externalTransfer')}
         </button>
+
+        {canUseInterac ? (
+          <button
+            onClick={() => setBankingTab('interac')}
+            aria-pressed={bankingTab === 'interac'}
+            className={`inline-flex h-10 items-center gap-2 rounded-lg border px-3.5 text-sm font-semibold transition-all ${
+              bankingTab === 'interac'
+                ? 'border-[#006446]/25 bg-[#006446]/8 text-[#006446]'
+                : 'border-transparent text-slate-500 hover:border-[#006446]/14 hover:bg-white hover:text-[#006446]'
+            }`}
+          >
+            <Send className="h-4 w-4" />
+            Interac e-Transfer
+          </button>
+        ) : null}
       </div>
 
       <div className="grid lg:grid-cols-5 gap-6">
@@ -337,6 +374,15 @@ function BankingTransferView({
               onSuccess={handleSuccess}
             />
           )}
+
+          {bankingTab === 'interac' && canUseInterac ? (
+            <InteracTransferPanel
+              fiatBalances={fiatBalances}
+              submitting={submitting}
+              onSubmit={createInteracTransfer}
+              onSuccess={handleSuccess}
+            />
+          ) : null}
         </div>
 
         <div className="lg:col-span-2 space-y-4">
@@ -354,7 +400,9 @@ function BankingTransferView({
             <h3 className="mb-2 font-semibold text-slate-900">
               {bankingTab === 'internal'
                 ? t('dashboardTransfers.banking.info.internalTitle')
-                : t('dashboardTransfers.banking.info.externalTitle')}
+                : bankingTab === 'interac'
+                  ? t('interacTransfer.info.title')
+                  : t('dashboardTransfers.banking.info.externalTitle')}
             </h3>
 
             <ul className="space-y-2 text-sm text-[#006446]">
@@ -363,6 +411,12 @@ function BankingTransferView({
                   <li>- {t('dashboardTransfers.banking.info.internal1')}</li>
                   <li>- {t('dashboardTransfers.banking.info.internal2')}</li>
                   <li>- {t('dashboardTransfers.banking.info.internal3')}</li>
+                </>
+              ) : bankingTab === 'interac' ? (
+                <>
+                  <li>- {t('interacTransfer.info.first')}</li>
+                  <li>- {t('interacTransfer.info.second')}</li>
+                  <li>- {t('interacTransfer.info.third')}</li>
                 </>
               ) : (
                 <>
@@ -389,8 +443,8 @@ function CryptoTransferView({
   t: (key: string) => string;
   branding: BrandingSettings;
   formatDate: (dateStr: string) => string;
-  cryptoTab: SubTab;
-  setCryptoTab: (t: SubTab) => void;
+  cryptoTab: CryptoTab;
+  setCryptoTab: (t: CryptoTab) => void;
 }) {
   const { wallets, loading: walletsLoading, refetch: refetchWallets } = useCryptoWallets();
   const { cryptoBalances, loading: balancesLoading, refetch: refetchBalances } = useCryptoBalances();
@@ -534,7 +588,7 @@ function BankTransferHistory({
   branding: BrandingSettings;
   formatDate: (dateStr: string) => string;
   transfers: BankTransfer[];
-  type: SubTab;
+  type: BankingTab;
 }) {
   const [selectedTransfer, setSelectedTransfer] = useState<BankTransfer | null>(null);
 
@@ -545,7 +599,9 @@ function BankTransferHistory({
           <h3 className="font-semibold text-slate-900">
             {type === 'internal'
               ? t('dashboardTransfers.history.internalBanking')
-              : t('dashboardTransfers.history.externalBanking')}
+              : type === 'interac'
+                ? t('interacTransfer.history.title')
+                : t('dashboardTransfers.history.externalBanking')}
           </h3>
         </div>
 
@@ -558,7 +614,9 @@ function BankTransferHistory({
               <p className="text-sm text-slate-400">
                 {type === 'internal'
                   ? t('dashboardTransfers.history.noInternalBanking')
-                  : t('dashboardTransfers.history.noExternalBanking')}
+                  : type === 'interac'
+                    ? t('interacTransfer.history.empty')
+                    : t('dashboardTransfers.history.noExternalBanking')}
               </p>
             </div>
           ) : (
@@ -572,6 +630,8 @@ function BankTransferHistory({
                 <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center bg-[#006446]/10 text-[#006446]">
                   {tx.transfer_type === 'internal' ? (
                     <ArrowRightLeft className="w-4 h-4" />
+                  ) : isInteracTransfer(tx) ? (
+                    <Send className="h-4 w-4" />
                   ) : (
                     <Building2 className="w-4 h-4" />
                   )}
@@ -585,7 +645,11 @@ function BankTransferHistory({
                   </p>
                   <p className="text-[11px] text-slate-400">
                     {formatDate(tx.created_at)}
-                    {tx.transfer_type === 'external' && tx.bank_name ? ` - ${tx.bank_name}` : ''}
+                    {isInteracTransfer(tx)
+                      ? ` - ${tx.notification_method === 'mobile' ? tx.recipient_phone : tx.recipient_email}`
+                      : tx.transfer_type === 'external' && tx.bank_name
+                        ? ` - ${tx.bank_name}`
+                        : ''}
                   </p>
                 </div>
 
@@ -627,7 +691,7 @@ function CryptoTransferHistory({
   formatDate: (dateStr: string) => string;
   transfers: CryptoTransfer[];
   loading: boolean;
-  type: SubTab;
+  type: CryptoTab;
 }) {
   const [selectedTransfer, setSelectedTransfer] = useState<CryptoTransfer | null>(null);
 
@@ -890,6 +954,7 @@ function BankTransferDetailModal({
   onClose: () => void;
 }) {
   const isInternal = transfer.transfer_type === 'internal';
+  const isInterac = isInteracTransfer(transfer);
   const title = isInternal
     ? `${transfer.currency} ${t('dashboardTransfers.common.to')} ${transfer.target_currency || '-'}`
     : transfer.recipient_name || t('dashboardTransfers.history.externalTransfer');
@@ -897,14 +962,20 @@ function BankTransferDetailModal({
   return (
     <TransferDetailShell
       title={title}
-      subtitle={`${isInternal ? 'Internal bank transfer' : 'External bank transfer'} - ${formatDate(transfer.created_at)}`}
+      subtitle={`${isInternal ? 'Internal bank transfer' : isInterac ? 'Interac e-Transfer' : 'External bank transfer'} - ${formatDate(transfer.created_at)}`}
       onClose={onClose}
       onDownloadInvoice={() => downloadTransferInvoice(buildBankTransferInvoice(transfer, formatDate), branding)}
       invoiceAvailable={transfer.status === 'completed'}
     >
       <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-[#006446]/10 bg-white px-4 py-3">
         <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#006446]/10 text-[#006446]">
-          {isInternal ? <ArrowRightLeft className="h-5 w-5" /> : <Building2 className="h-5 w-5" />}
+          {isInternal ? (
+            <ArrowRightLeft className="h-5 w-5" />
+          ) : isInterac ? (
+            <Send className="h-5 w-5" />
+          ) : (
+            <Building2 className="h-5 w-5" />
+          )}
         </div>
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold text-slate-950">{formatCurrency(transfer.amount, transfer.currency)}</p>
@@ -915,11 +986,21 @@ function BankTransferDetailModal({
 
       <div className="grid gap-3 sm:grid-cols-2">
         <DetailRow label="Created" value={formatDate(transfer.created_at)} />
-        <DetailRow label="Transfer type" value={toTitleCase(transfer.transfer_type)} />
+        <DetailRow label="Transfer type" value={isInterac ? 'Interac e-Transfer' : toTitleCase(transfer.transfer_type)} />
         <DetailRow label="Amount" value={formatCurrency(transfer.amount, transfer.currency)} />
         <DetailRow label="Source currency" value={transfer.currency} />
         {isInternal ? (
           <DetailRow label="Target currency" value={transfer.target_currency} />
+        ) : isInterac ? (
+          <>
+            <DetailRow label="Recipient" value={transfer.recipient_name} />
+            <DetailRow label="Notification method" value={toTitleCase(transfer.notification_method || '')} />
+            <DetailRow
+              label="Recipient contact"
+              value={transfer.notification_method === 'mobile' ? transfer.recipient_phone : transfer.recipient_email}
+            />
+            <DetailRow label="Security question" value={transfer.security_question} />
+          </>
         ) : (
           <>
             <DetailRow label="Recipient" value={transfer.recipient_name} />

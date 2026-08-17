@@ -1,13 +1,17 @@
-import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   AlertCircle,
   ArrowDown,
   ArrowUp,
   Check,
+  ChevronLeft,
+  ChevronRight,
   Copy,
   CreditCard,
   Database,
+  Eye,
+  EyeOff,
   Image as ImageIcon,
   Landmark,
   Layers3,
@@ -27,10 +31,11 @@ import {
 } from 'lucide-react';
 import BrandLogo from '../../components/ui/BrandLogo';
 import Dropdown from '../../components/ui/Dropdown';
+import QRCode from '../../components/ui/QRCode';
+import IpWhitelistCard from '../../components/admin/IpWhitelistCard';
 import { useAuth } from '../../contexts/AuthContext';
 import {
   DEFAULT_BRANDING,
-  applyBrandingToText,
   getBrandReferencePrefix,
   type BrandingSettings,
   type BrandingUpdate,
@@ -38,6 +43,7 @@ import {
 } from '../../contexts/BrandingContext';
 import { supabase } from '../../lib/supabase';
 import { fetchLiveMarketData } from '../../lib/exchangeRates';
+import { getCryptoPaymentRequest } from '../../lib/cryptoPayment';
 import {
   getBalanceStatusClasses,
   getBalanceStatusLabel,
@@ -77,6 +83,7 @@ type ProfileRecord = {
   assigned_manager_id: string | null;
   assigned_agent_id: string | null;
   plain_password: string | null;
+  show_account_created_at: boolean;
 };
 
 type AdminRow = {
@@ -148,6 +155,7 @@ type BalanceDraft = {
   code: string;
   name: string;
   balance: string;
+  status: BalanceAvailabilityStatus;
 };
 
 type DraftField = {
@@ -165,6 +173,34 @@ type ProfileSavePayload = {
   assigned_manager_id: string | null;
   assigned_agent_id: string | null;
   password: string;
+  account_created_date: string;
+  show_account_created_at: boolean;
+};
+
+type NewUserDraft = {
+  full_name: string;
+  email: string;
+  password: string;
+  confirm_password: string;
+  account_iban: string;
+  kyc_status: KycStatus;
+  crm_role: CrmRole;
+  assigned_manager_id: string;
+  assigned_agent_id: string;
+  email_confirm: boolean;
+  account_created_date: string;
+  show_account_created_at: boolean;
+};
+
+type CreateUserResponse = {
+  error?: string;
+  rollback_warning?: string | null;
+  profile?: ProfileRecord;
+  user?: {
+    id?: string;
+    email?: string;
+    email_confirmed?: boolean;
+  };
 };
 
 type DeleteUserResponse = {
@@ -174,6 +210,35 @@ type DeleteUserResponse = {
 };
 
 type BrandingForm = BrandingUpdate;
+type DirectoryRoleFilter = 'all' | CrmRole;
+
+const PROFILE_RECORD_SELECT = 'id, full_name, email, account_iban, created_at, updated_at, kyc_status, crm_role, is_admin, assigned_manager_id, assigned_agent_id, plain_password, show_account_created_at';
+
+function getTodayDateInputValue() {
+  const now = new Date();
+  const offsetMilliseconds = now.getTimezoneOffset() * 60_000;
+  return new Date(now.getTime() - offsetMilliseconds).toISOString().slice(0, 10);
+}
+
+function accountDateInputToIso(date: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return null;
+
+  const parsedDate = new Date(`${date}T12:00:00.000Z`);
+  if (Number.isNaN(parsedDate.getTime()) || parsedDate.toISOString().slice(0, 10) !== date) return null;
+  return parsedDate.toISOString();
+}
+
+function accountDateIsoToInputValue(value: string) {
+  const parsedDate = new Date(value);
+  if (Number.isNaN(parsedDate.getTime())) return getTodayDateInputValue();
+
+  const offsetMilliseconds = parsedDate.getTimezoneOffset() * 60_000;
+  return new Date(parsedDate.getTime() - offsetMilliseconds).toISOString().slice(0, 10);
+}
+
+function waitForProfileTrigger(delayMs = 200) {
+  return new Promise<void>((resolve) => window.setTimeout(resolve, delayMs));
+}
 
 async function insertAdminRow(tableName: string, payload: Record<string, unknown>) {
   let result = await supabase.from(tableName).insert(payload).select().single();
@@ -319,9 +384,33 @@ type CrmAdminViewState = {
   activeTable?: string;
   search?: string;
   scrollTop?: number;
+  directoryRoleFilter?: DirectoryRoleFilter;
+  directoryPage?: number;
+  directoryPageSize?: number;
 };
 
 const CRM_ADMIN_VIEW_STATE_KEY = 'crm-admin:view-state';
+const DIRECTORY_PAGE_SIZES = [5, 10, 20, 50] as const;
+const DIRECTORY_ROLE_FILTERS: Array<{ value: DirectoryRoleFilter; label: string }> = [
+  { value: 'all', label: 'All users' },
+  { value: 'customer', label: 'Customers' },
+  { value: 'agent', label: 'Agents' },
+  { value: 'superior_manager', label: 'Superior managers' },
+  { value: 'admin', label: 'Admins' },
+];
+
+function normalizeDirectoryRoleFilter(value: unknown): DirectoryRoleFilter {
+  return value === 'customer' || value === 'agent' || value === 'superior_manager' || value === 'admin'
+    ? value
+    : 'all';
+}
+
+function normalizeDirectoryPageSize(value: unknown) {
+  const numericValue = Number(value);
+  return DIRECTORY_PAGE_SIZES.includes(numericValue as (typeof DIRECTORY_PAGE_SIZES)[number])
+    ? numericValue
+    : DIRECTORY_PAGE_SIZES[0];
+}
 
 function getCrmRoleClasses(role: CrmRole) {
   switch (role) {
@@ -545,6 +634,10 @@ function isTransactionSourceTable(tableName: string): tableName is TransactionSo
 
 function isTransferSourceTable(tableName: string): tableName is TransferSourceTable {
   return TRANSFER_SOURCE_TABLES.includes(tableName as TransferSourceTable);
+}
+
+function isActivitySourceTableName(tableName: string): tableName is ActivitySourceTable {
+  return isTransactionSourceTable(tableName) || isTransferSourceTable(tableName);
 }
 
 function isTransactionActivityRow(row: ActivityRow): row is TransactionRow {
@@ -897,14 +990,19 @@ function getRowTimestampLabel(row: AdminRow, table?: TableConfig) {
   return `${label} ${formatDayMonthYear(timestamp)}`;
 }
 
-function formatDateInputValue(value: unknown) {
+function formatDateTimeInputValue(value: unknown) {
   if (typeof value !== 'string' || !value.trim()) return '';
 
-  if (/^\d{0,2}(\/\d{0,2})?(\/\d{0,4})?$/.test(value) && !value.includes('-')) {
-    return value;
-  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
 
-  return formatDayMonthYear(value);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
 }
 
 function normalizeDateForSave(value: unknown, fallback: unknown) {
@@ -931,6 +1029,42 @@ function normalizeDateForSave(value: unknown, fallback: unknown) {
   if (Number.isNaN(date.getTime())) return fallback;
 
   return date.toISOString();
+}
+
+function isActivityDraftDateField(sourceTable: ActivitySourceTable, key: string) {
+  return isActivitySourceTableName(sourceTable) && key.trim().toLowerCase() === 'created_at';
+}
+
+function shouldShowTransferCreateField(sourceTable: TransferSourceTable, key: string) {
+  const normalizedKey = key.trim().toLowerCase();
+
+  if (normalizedKey === 'transfer_type') return false;
+  if (sourceTable === 'bank_transfers' && normalizedKey === 'target_currency') return false;
+  if (sourceTable === 'crypto_transfers' && normalizedKey === 'target_symbol') return false;
+
+  return true;
+}
+
+function enforceExternalTransferCreatePayload(
+  sourceTable: TransferSourceTable,
+  payload: Record<string, unknown>
+) {
+  payload.transfer_type = 'external';
+
+  if (sourceTable === 'bank_transfers') {
+    payload.target_currency = null;
+  } else {
+    payload.target_symbol = '';
+  }
+}
+
+function normalizeActivityCreateDate(payload: Record<string, unknown>) {
+  const normalizedDate = normalizeDateForSave(payload.created_at, null);
+
+  if (typeof normalizedDate !== 'string') return false;
+
+  payload.created_at = normalizedDate;
+  return true;
 }
 
 function summariseEntries(row: AdminRow) {
@@ -971,8 +1105,59 @@ function sanitizeInsertPayload(row: AdminRow) {
   return payload;
 }
 
+function normalizeWalletAdminPayload(payload: Record<string, unknown>) {
+  return {
+    ...payload,
+    symbol: String(payload.symbol || '').trim().toUpperCase(),
+    network: String(payload.network || '').trim(),
+    wallet_address: String(payload.wallet_address || '').trim(),
+    payment_uri: String(payload.payment_uri || '').trim(),
+    ...(Object.prototype.hasOwnProperty.call(payload, 'name')
+      ? { name: String(payload.name || '').trim() }
+      : {}),
+    ...(Object.prototype.hasOwnProperty.call(payload, 'label')
+      ? { label: String(payload.label || '').trim() || 'Tax Payment Wallet' }
+      : {}),
+  };
+}
+
+function buildTaxSummaryCardUpsertRows(
+  rows: AdminRow[],
+  userId: string,
+  targetStatus: TaxStatus,
+  targetAmount: number,
+  currency: string
+) {
+  const amounts = new Map<TaxStatus, number>();
+
+  rows.forEach((row) => {
+    amounts.set(normalizeTaxStatus(row.status), getNumericTaxAmount(row.amount));
+  });
+
+  return TAX_STATUS_OPTIONS.map(({ value: status }) => ({
+    user_id: userId,
+    status,
+    amount: status === targetStatus ? targetAmount : amounts.get(status) || 0,
+    currency,
+    updated_at: new Date().toISOString(),
+  }));
+}
+
+function shouldRetryTaxSummaryWithoutRpc(error: { code?: string; message?: string } | null) {
+  if (!error) return false;
+
+  const message = (error.message || '').toLowerCase();
+  return error.code === 'P0001'
+    || error.code === 'PGRST202'
+    || error.code === '42883'
+    || error.code === '42501'
+    || message.includes('admin access required')
+    || message.includes('could not find the function')
+    || message.includes('permission denied');
+}
+
 function isLongField(key: string, value: unknown) {
-  const longKeys = ['comment', 'description', 'details', 'notes', 'review_notes', 'address', 'wallet_address', 'tx_hash'];
+  const longKeys = ['comment', 'description', 'details', 'notes', 'review_notes', 'address', 'wallet_address', 'payment_uri', 'tx_hash'];
   return typeof value === 'string' && (value.length > 48 || longKeys.some((part) => key.includes(part)));
 }
 
@@ -1043,9 +1228,10 @@ function buildCreateTemplate(table: TableConfig, userId: string, sampleRow?: Adm
     ? {
         user_id: userId,
         type: 'debit',
-        details: '',
-        comment: '',
-        poi: '',
+        amount: '',
+        description: '',
+        reference: '',
+        notes: '',
         status: 'completed',
       }
     : table.name === 'crypto_transactions'
@@ -1066,6 +1252,24 @@ function buildCreateTemplate(table: TableConfig, userId: string, sampleRow?: Adm
         description: '',
         comment: '',
       }
+    : table.name === 'crypto_wallets'
+    ? {
+        user_id: userId,
+        symbol: '',
+        name: '',
+        wallet_address: '',
+        network: '',
+        payment_uri: '',
+      }
+    : table.name === 'tax_wallet_addresses'
+    ? {
+        user_id: userId,
+        label: 'Tax Payment Wallet',
+        symbol: '',
+        network: '',
+        wallet_address: '',
+        payment_uri: '',
+      }
     : table.name === 'taxes'
     ? {
         user_id: userId,
@@ -1080,30 +1284,6 @@ function buildCreateTemplate(table: TableConfig, userId: string, sampleRow?: Adm
         reference_number: '',
         notes: '',
       }
-    : table.name === 'crypto_wallets'
-    ? {
-        user_id: userId,
-        symbol: '',
-        name: '',
-        wallet_address: '',
-        network: '',
-        chain_id: '',
-        token_contract: '',
-        token_decimals: null,
-        payment_uri_scheme: '',
-      }
-    : table.name === 'tax_wallet_addresses'
-    ? {
-        user_id: userId,
-        symbol: '',
-        network: '',
-        wallet_address: '',
-        label: 'Tax Payment Wallet',
-        chain_id: '',
-        token_contract: '',
-        token_decimals: null,
-        payment_uri_scheme: '',
-      }
     : {};
 
   if (table.scope === 'user' && table.filterColumn && userId) {
@@ -1112,6 +1292,11 @@ function buildCreateTemplate(table: TableConfig, userId: string, sampleRow?: Adm
 
   if (table.name === 'bank_transfers' || table.name === 'crypto_transfers') {
     payload.status = 'pending';
+    enforceExternalTransferCreatePayload(table.name, payload);
+  }
+
+  if (isActivitySourceTableName(table.name)) {
+    payload.created_at = new Date().toISOString();
   }
 
   return payload;
@@ -1162,6 +1347,8 @@ export function ProfileEditorCard({
     assigned_manager_id: profile.assigned_manager_id || '',
     assigned_agent_id: profile.assigned_agent_id || '',
     password: profile.plain_password || '',
+    account_created_date: accountDateIsoToInputValue(profile.created_at),
+    show_account_created_at: profile.show_account_created_at !== false,
   });
 
   useEffect(() => {
@@ -1174,6 +1361,8 @@ export function ProfileEditorCard({
       assigned_manager_id: profile.assigned_manager_id || '',
       assigned_agent_id: profile.assigned_agent_id || '',
       password: '',
+      account_created_date: accountDateIsoToInputValue(profile.created_at),
+      show_account_created_at: profile.show_account_created_at !== false,
     });
   }, [profile]);
 
@@ -1274,6 +1463,396 @@ export function ProfileEditorCard({
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+function CreateUserDialog({
+  profiles,
+  viewerId,
+  viewerRole,
+  creating,
+  error,
+  onCancel,
+  onCreate,
+}: {
+  profiles: ProfileRecord[];
+  viewerId: string;
+  viewerRole: CrmRole;
+  creating: boolean;
+  error: string;
+  onCancel: () => void;
+  onCreate: (draft: NewUserDraft) => Promise<void>;
+}) {
+  const [form, setForm] = useState<NewUserDraft>({
+    full_name: '',
+    email: '',
+    password: '',
+    confirm_password: '',
+    account_iban: '',
+    kyc_status: 'pending',
+    crm_role: 'customer',
+    assigned_manager_id: '',
+    assigned_agent_id: '',
+    email_confirm: true,
+    account_created_date: getTodayDateInputValue(),
+    show_account_created_at: true,
+  });
+  const [validationError, setValidationError] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const roleOptions = useMemo(
+    () => {
+      const allowedRoles: CrmRole[] = viewerRole === 'admin'
+        ? ['customer', 'agent', 'superior_manager', 'admin']
+        : viewerRole === 'superior_manager'
+        ? ['customer', 'agent']
+        : ['customer'];
+
+      return allowedRoles.map((role) => ({ value: role, label: getCrmRoleLabel(role) }));
+    },
+    [viewerRole]
+  );
+  const managerOptions = useMemo(
+    () => [
+      { value: '', label: 'Unassigned' },
+      ...profiles
+        .filter((profile) => profile.crm_role === 'superior_manager')
+        .map((profile) => ({ value: profile.id, label: getProfileDisplayName(profile) })),
+    ],
+    [profiles]
+  );
+  const agentOptions = useMemo(
+    () => [
+      { value: '', label: 'Unassigned' },
+      ...profiles
+        .filter(
+          (profile) =>
+            profile.crm_role === 'agent' &&
+            (viewerRole === 'admin' || profile.assigned_manager_id === viewerId) &&
+            (!form.assigned_manager_id || profile.assigned_manager_id === form.assigned_manager_id)
+        )
+        .map((profile) => ({ value: profile.id, label: getProfileDisplayName(profile) })),
+    ],
+    [form.assigned_manager_id, profiles, viewerId, viewerRole]
+  );
+
+  const handleRoleChange = (value: string) => {
+    const nextRole = normalizeCrmRole(value, 'customer');
+    setForm((current) => ({
+      ...current,
+      crm_role: nextRole,
+      assigned_manager_id:
+        nextRole === 'admin' || nextRole === 'superior_manager' ? '' : current.assigned_manager_id,
+      assigned_agent_id: nextRole === 'customer' ? current.assigned_agent_id : '',
+    }));
+  };
+
+  const handleManagerChange = (managerId: string) => {
+    setForm((current) => {
+      const currentAgent = profiles.find((profile) => profile.id === current.assigned_agent_id);
+      const keepAgent =
+        !currentAgent || !managerId || currentAgent.assigned_manager_id === managerId;
+      return {
+        ...current,
+        assigned_manager_id: managerId,
+        assigned_agent_id: keepAgent ? current.assigned_agent_id : '',
+      };
+    });
+  };
+
+  const handleAgentChange = (agentId: string) => {
+    const agent = profiles.find((profile) => profile.id === agentId);
+    setForm((current) => ({
+      ...current,
+      assigned_agent_id: agentId,
+      assigned_manager_id: agent?.assigned_manager_id || current.assigned_manager_id,
+    }));
+  };
+
+  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setValidationError('');
+
+    if (!form.full_name.trim()) {
+      setValidationError('Full name is required.');
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
+      setValidationError('Enter a valid email address.');
+      return;
+    }
+    if (form.password.length < 6) {
+      setValidationError('Password must be at least 6 characters.');
+      return;
+    }
+    if (form.password !== form.confirm_password) {
+      setValidationError('The password confirmation does not match.');
+      return;
+    }
+    if (!accountDateInputToIso(form.account_created_date)) {
+      setValidationError('Choose a valid account creation date.');
+      return;
+    }
+
+    void onCreate(form);
+  };
+
+  return (
+    <div className="fixed inset-0 z-[9000] flex items-center justify-center bg-slate-950/55 p-4">
+      <button
+        type="button"
+        onClick={creating ? undefined : onCancel}
+        aria-label="Close create user dialog"
+        className="absolute inset-0 cursor-default"
+      />
+
+      <form
+        noValidate
+        onSubmit={handleSubmit}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="create-user-title"
+        className="relative z-10 max-h-[92vh] w-full max-w-4xl overflow-y-auto rounded-[28px] border border-[#006446]/14 bg-white shadow-[0_32px_100px_-38px_rgba(0,100,70,0.65)]"
+      >
+        <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-[#006446]/10 bg-white px-6 py-5">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[#006446]">Account setup</p>
+            <h2 id="create-user-title" className="mt-1 text-2xl font-serif font-bold text-slate-950">Create new user</h2>
+            <p className="mt-1 text-sm text-slate-500">Create the login, CRM profile, balances, and wallets in one operation.</p>
+          </div>
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={creating}
+            aria-label="Close create user dialog"
+            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[#006446]/12 text-[#006446] transition-colors hover:bg-[#006446]/[0.05] disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="grid gap-4 px-6 py-6 md:grid-cols-2">
+          <label className="space-y-2">
+            <span className="text-sm font-medium text-slate-700">Full name *</span>
+            <input
+              value={form.full_name}
+              onChange={(event) => setForm((current) => ({ ...current, full_name: event.target.value }))}
+              disabled={creating}
+              autoFocus
+              autoComplete="name"
+              className="w-full rounded-xl border border-[#006446]/14 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition-all focus:border-[#006446]/35 focus:ring-2 focus:ring-[#006446]/15 disabled:bg-slate-50"
+            />
+          </label>
+
+          <label className="space-y-2">
+            <span className="text-sm font-medium text-slate-700">Email *</span>
+            <input
+              type="email"
+              value={form.email}
+              onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))}
+              disabled={creating}
+              autoComplete="email"
+              className="w-full rounded-xl border border-[#006446]/14 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition-all focus:border-[#006446]/35 focus:ring-2 focus:ring-[#006446]/15 disabled:bg-slate-50"
+            />
+          </label>
+
+          <div className="space-y-2">
+            <label htmlFor="create-user-password" className="block text-sm font-medium text-slate-700">Password *</label>
+            <div className="relative">
+              <input
+                id="create-user-password"
+                type={showPassword ? 'text' : 'password'}
+                value={form.password}
+                onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))}
+                disabled={creating}
+                autoComplete="new-password"
+                className="w-full rounded-xl border border-[#006446]/14 bg-white py-3 pl-4 pr-12 text-sm text-slate-900 outline-none transition-all focus:border-[#006446]/35 focus:ring-2 focus:ring-[#006446]/15 disabled:bg-slate-50"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((visible) => !visible)}
+                disabled={creating}
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+                aria-pressed={showPassword}
+                className="absolute inset-y-0 right-0 inline-flex w-12 items-center justify-center text-slate-500 transition-colors hover:text-[#006446] disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
+            <p className="text-xs text-slate-500">Use at least 6 characters.</p>
+          </div>
+
+          <div className="space-y-2">
+            <label htmlFor="create-user-confirm-password" className="block text-sm font-medium text-slate-700">Confirm password *</label>
+            <div className="relative">
+              <input
+                id="create-user-confirm-password"
+                type={showConfirmPassword ? 'text' : 'password'}
+                value={form.confirm_password}
+                onChange={(event) => setForm((current) => ({ ...current, confirm_password: event.target.value }))}
+                disabled={creating}
+                autoComplete="new-password"
+                className="w-full rounded-xl border border-[#006446]/14 bg-white py-3 pl-4 pr-12 text-sm text-slate-900 outline-none transition-all focus:border-[#006446]/35 focus:ring-2 focus:ring-[#006446]/15 disabled:bg-slate-50"
+              />
+              <button
+                type="button"
+                onClick={() => setShowConfirmPassword((visible) => !visible)}
+                disabled={creating}
+                aria-label={showConfirmPassword ? 'Hide password confirmation' : 'Show password confirmation'}
+                aria-pressed={showConfirmPassword}
+                className="absolute inset-y-0 right-0 inline-flex w-12 items-center justify-center text-slate-500 transition-colors hover:text-[#006446] disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
+          </div>
+
+          <label className="space-y-2 md:col-span-2">
+            <span className="text-sm font-medium text-slate-700">Account IBAN</span>
+            <input
+              value={form.account_iban}
+              onChange={(event) => setForm((current) => ({ ...current, account_iban: event.target.value }))}
+              disabled={creating}
+              placeholder="Optional"
+              autoComplete="off"
+              className="w-full rounded-xl border border-[#006446]/14 bg-white px-4 py-3 font-mono text-sm uppercase text-slate-900 outline-none transition-all focus:border-[#006446]/35 focus:ring-2 focus:ring-[#006446]/15 disabled:bg-slate-50"
+            />
+          </label>
+
+          <div className={`space-y-2 ${creating ? 'pointer-events-none opacity-60' : ''}`}>
+            <span className="text-sm font-medium text-slate-700">KYC status</span>
+            <Dropdown
+              value={form.kyc_status}
+              options={kycOptions}
+              onChange={(value) => setForm((current) => ({ ...current, kyc_status: value as KycStatus }))}
+            />
+          </div>
+
+          <div className={`space-y-2 ${creating ? 'pointer-events-none opacity-60' : ''}`}>
+            <span className="text-sm font-medium text-slate-700">CRM role</span>
+            <Dropdown value={form.crm_role} options={roleOptions} onChange={handleRoleChange} />
+          </div>
+
+          <div className="space-y-4 rounded-2xl border border-[#006446]/12 bg-[#006446]/[0.03] px-4 py-4 md:col-span-2">
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#006446]">Client account date</p>
+              <p className="mt-1 text-sm text-slate-500">Set the membership date and choose whether the client can see it.</p>
+            </div>
+            <div className="grid gap-4 md:grid-cols-2">
+              <label className="space-y-2">
+                <span className="text-sm font-medium text-slate-700">Account created date</span>
+                <input
+                  type="date"
+                  value={form.account_created_date}
+                  onChange={(event) => setForm((current) => ({ ...current, account_created_date: event.target.value }))}
+                  disabled={creating}
+                  required
+                  className="w-full rounded-xl border border-[#006446]/14 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition-all focus:border-[#006446]/35 focus:ring-2 focus:ring-[#006446]/15 disabled:bg-slate-50"
+                />
+              </label>
+
+              <label className="flex items-start gap-3 rounded-xl border border-[#006446]/10 bg-white px-4 py-3">
+                <input
+                  type="checkbox"
+                  checked={!form.show_account_created_at}
+                  onChange={(event) => setForm((current) => ({ ...current, show_account_created_at: !event.target.checked }))}
+                  disabled={creating}
+                  className="mt-0.5 h-4 w-4 rounded border-slate-300 accent-[#006446]"
+                />
+                <span>
+                  <span className="block text-sm font-semibold text-slate-800">Hide date from client</span>
+                  <span className="mt-1 block text-xs text-slate-500">Removes “Member since” from the client profile card.</span>
+                </span>
+              </label>
+            </div>
+          </div>
+
+          {(form.crm_role === 'customer' || form.crm_role === 'agent') && viewerRole !== 'agent' && (
+            <div className="space-y-4 rounded-2xl border border-[#006446]/12 bg-[#006446]/[0.03] px-4 py-4 md:col-span-2">
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#006446]">Hierarchy assignment</p>
+                <p className="mt-1 text-sm text-slate-500">Assignments can be left empty and added later.</p>
+              </div>
+              <div className={`grid gap-4 ${form.crm_role === 'customer' && viewerRole === 'admin' ? 'md:grid-cols-2' : ''} ${creating ? 'pointer-events-none opacity-60' : ''}`}>
+                {viewerRole === 'admin' && (
+                  <div className="space-y-2">
+                    <span className="text-sm font-medium text-slate-700">Superior manager</span>
+                    <Dropdown
+                      value={form.assigned_manager_id}
+                      options={managerOptions}
+                      onChange={handleManagerChange}
+                      searchable
+                      searchPlaceholder="Search managers..."
+                    />
+                  </div>
+                )}
+                {form.crm_role === 'customer' && (
+                  <div className="space-y-2">
+                    <span className="text-sm font-medium text-slate-700">Assigned agent</span>
+                    <Dropdown
+                      value={form.assigned_agent_id}
+                      options={agentOptions}
+                      onChange={handleAgentChange}
+                      searchable
+                      searchPlaceholder="Search agents..."
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          <label className="flex items-start gap-3 rounded-2xl border border-[#006446]/12 bg-[#006446]/[0.03] px-4 py-4 md:col-span-2">
+            <input
+              type="checkbox"
+              checked={form.email_confirm}
+              onChange={(event) => setForm((current) => ({ ...current, email_confirm: event.target.checked }))}
+              disabled={creating}
+              className="mt-0.5 h-4 w-4 rounded border-slate-300 accent-[#006446]"
+            />
+            <span>
+              <span className="block text-sm font-semibold text-slate-800">Mark email as confirmed</span>
+              <span className="mt-1 block text-xs text-slate-500">The user can sign in immediately with the password above.</span>
+            </span>
+          </label>
+
+          {(validationError || error) && (
+            <div className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 md:col-span-2">
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+              <span>{validationError || error}</span>
+            </div>
+          )}
+        </div>
+
+        <div className="sticky bottom-0 flex flex-col-reverse gap-3 border-t border-[#006446]/10 bg-[#f7fbf8] px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-xs text-slate-500">
+            {viewerRole === 'admin'
+              ? 'Administrators can create every CRM role.'
+              : viewerRole === 'superior_manager'
+              ? 'Superior managers can create agents and customers in their team.'
+              : 'Agents can create customers assigned directly to themselves.'}
+          </p>
+          <div className="flex flex-col-reverse gap-3 sm:flex-row">
+            <button
+              type="button"
+              onClick={onCancel}
+              disabled={creating}
+              className="inline-flex items-center justify-center rounded-full border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={creating}
+              className="inline-flex items-center justify-center gap-2 rounded-full bg-[#006446] px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#004d36] disabled:cursor-not-allowed disabled:opacity-70"
+            >
+              {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+              {creating ? 'Creating user...' : 'Create user'}
+            </button>
+          </div>
+        </div>
+      </form>
     </div>
   );
 }
@@ -1396,6 +1975,8 @@ function ProfileSummaryCard({
     assigned_manager_id: profile.assigned_manager_id || '',
     assigned_agent_id: profile.assigned_agent_id || '',
     password: '',
+    account_created_date: accountDateIsoToInputValue(profile.created_at),
+    show_account_created_at: profile.show_account_created_at !== false,
   });
   const profileMap = useMemo(() => new Map(profiles.map((entry) => [entry.id, entry])), [profiles]);
   const roleOptions = useMemo(
@@ -1430,7 +2011,11 @@ function ProfileSummaryCard({
   const canEditRole = viewerRole === 'admin';
   const canEditManagerAssignment = viewerRole === 'admin';
   const canEditAgentAssignment = viewerRole === 'admin' || viewerRole === 'superior_manager';
+  const canEditAccountDate = viewerRole === 'admin'
+    || viewerRole === 'superior_manager'
+    || viewerRole === 'agent';
   const currentFormRole = normalizeCrmRole(form.crm_role, profile.crm_role);
+  const accountDateIsValid = Boolean(accountDateInputToIso(form.account_created_date));
 
   const resetForm = () => {
     setForm({
@@ -1442,6 +2027,8 @@ function ProfileSummaryCard({
       assigned_manager_id: profile.assigned_manager_id || '',
       assigned_agent_id: profile.assigned_agent_id || '',
       password: profile.plain_password || '',
+      account_created_date: accountDateIsoToInputValue(profile.created_at),
+      show_account_created_at: profile.show_account_created_at !== false,
     });
   };
 
@@ -1455,6 +2042,8 @@ function ProfileSummaryCard({
       assigned_manager_id: profile.assigned_manager_id || '',
       assigned_agent_id: profile.assigned_agent_id || '',
       password: profile.plain_password || '',
+      account_created_date: accountDateIsoToInputValue(profile.created_at),
+      show_account_created_at: profile.show_account_created_at !== false,
     });
   }, [profile]);
 
@@ -1618,6 +2207,50 @@ function ProfileSummaryCard({
                 <p className="text-xs text-slate-500">Changing this updates both Supabase Auth and `profiles.plain_password`.</p>
               </label>
 
+              <div className="space-y-4 rounded-2xl border border-[#006446]/12 bg-[#006446]/[0.03] px-4 py-4 md:col-span-2">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#006446]">Client account date</p>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Change the profile creation date and control whether it appears on the client profile.
+                  </p>
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-2">
+                  <label className="space-y-2">
+                    <span className="text-sm font-medium text-slate-700">Profile created date</span>
+                    <input
+                      type="date"
+                      value={form.account_created_date}
+                      onChange={(event) => setForm((prev) => ({ ...prev, account_created_date: event.target.value }))}
+                      disabled={!canEditAccountDate || saving}
+                      required
+                      className="w-full rounded-xl border border-[#006446]/14 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition-all focus:border-[#006446]/35 focus:ring-2 focus:ring-[#006446]/15 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
+                    />
+                    {!accountDateIsValid && (
+                      <p className="text-xs font-medium text-red-600">Choose a valid profile creation date.</p>
+                    )}
+                  </label>
+
+                  <label className="flex items-start gap-3 rounded-xl border border-[#006446]/10 bg-white px-4 py-3">
+                    <input
+                      type="checkbox"
+                      checked={!form.show_account_created_at}
+                      onChange={(event) => setForm((prev) => ({ ...prev, show_account_created_at: !event.target.checked }))}
+                      disabled={!canEditAccountDate || saving}
+                      className="mt-0.5 h-4 w-4 rounded border-slate-300 accent-[#006446] disabled:cursor-not-allowed"
+                    />
+                    <span>
+                      <span className="block text-sm font-semibold text-slate-800">Hide date from client</span>
+                      <span className="mt-1 block text-xs text-slate-500">Removes “Member since” from the client profile card.</span>
+                    </span>
+                  </label>
+                </div>
+
+                <p className="text-xs text-slate-500">
+                  CRM staff can change these settings only for profiles inside their assigned scope.
+                </p>
+              </div>
+
               <div className="space-y-2">
                 <span className="text-sm font-medium text-slate-700">Role</span>
                 {canEditRole ? (
@@ -1727,7 +2360,7 @@ function ProfileSummaryCard({
                     assigned_manager_id: form.assigned_manager_id || null,
                     assigned_agent_id: form.assigned_agent_id || null,
                   })}
-                  disabled={saving}
+                  disabled={saving || !accountDateIsValid}
                   className="inline-flex items-center justify-center gap-2 rounded-full bg-[#006446] px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#004d36] disabled:cursor-not-allowed disabled:opacity-70"
                 >
                   {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
@@ -1748,6 +2381,22 @@ function toBrandingForm(branding: BrandingSettings): BrandingForm {
     brandKeyword: branding.brandKeyword,
     navbarLogoUrl: branding.navbarLogoUrl,
     footerLogoUrl: branding.footerLogoUrl,
+    faviconIcoUrl: branding.faviconIcoUrl,
+    favicon16Url: branding.favicon16Url,
+    favicon32Url: branding.favicon32Url,
+    appleTouchIconUrl: branding.appleTouchIconUrl,
+    favicon192Url: branding.favicon192Url,
+    favicon512Url: branding.favicon512Url,
+    mfiId: branding.mfiId,
+    countryCode: branding.countryCode,
+    mfiCode: branding.mfiCode,
+    institutionalTitle: branding.institutionalTitle,
+    institutionalDescription: branding.institutionalDescription,
+    mfiIdNote: branding.mfiIdNote,
+    depositorProtectionTitle: branding.depositorProtectionTitle,
+    depositorProtectionDescription: branding.depositorProtectionDescription,
+    depositorProtectionUrl: branding.depositorProtectionUrl,
+    legalContactEmail: branding.legalContactEmail,
   };
 }
 
@@ -1762,6 +2411,7 @@ function BrandingSettingsCard({
   onFieldChange,
   onSyncLogosChange,
   onUploadLogo,
+  onUploadFavicon,
   onSave,
   onReset,
   onRefresh,
@@ -1772,19 +2422,39 @@ function BrandingSettingsCard({
   loading: boolean;
   remoteAvailable: boolean;
   saving: boolean;
-  uploadingLogo: 'navbar' | 'footer' | null;
+  uploadingLogo: 'navbar' | 'footer' | 'favicon' | null;
   onFieldChange: (field: keyof BrandingForm, value: string) => void;
   onSyncLogosChange: (checked: boolean) => void;
   onUploadLogo: (slot: 'navbar' | 'footer', file: File) => Promise<void>;
+  onUploadFavicon: (file: File) => Promise<void>;
   onSave: () => Promise<void>;
   onReset: () => void;
   onRefresh: () => Promise<void>;
 }) {
+  const navbarLogoInputRef = useRef<HTMLInputElement>(null);
+  const footerLogoInputRef = useRef<HTMLInputElement>(null);
+  const faviconInputRef = useRef<HTMLInputElement>(null);
   const previewBranding: BrandingSettings = {
     brandName: form.brandName.trim() || DEFAULT_BRANDING.brandName,
     brandKeyword: form.brandKeyword.trim() || DEFAULT_BRANDING.brandKeyword,
     navbarLogoUrl: form.navbarLogoUrl.trim() || DEFAULT_BRANDING.navbarLogoUrl,
     footerLogoUrl: form.footerLogoUrl.trim() || DEFAULT_BRANDING.footerLogoUrl,
+    faviconIcoUrl: form.faviconIcoUrl.trim() || DEFAULT_BRANDING.faviconIcoUrl,
+    favicon16Url: form.favicon16Url.trim() || DEFAULT_BRANDING.favicon16Url,
+    favicon32Url: form.favicon32Url.trim() || DEFAULT_BRANDING.favicon32Url,
+    appleTouchIconUrl: form.appleTouchIconUrl.trim() || DEFAULT_BRANDING.appleTouchIconUrl,
+    favicon192Url: form.favicon192Url.trim() || DEFAULT_BRANDING.favicon192Url,
+    favicon512Url: form.favicon512Url.trim() || DEFAULT_BRANDING.favicon512Url,
+    mfiId: form.mfiId.trim() || DEFAULT_BRANDING.mfiId,
+    countryCode: form.countryCode.trim() || DEFAULT_BRANDING.countryCode,
+    mfiCode: form.mfiCode.trim() || DEFAULT_BRANDING.mfiCode,
+    institutionalTitle: form.institutionalTitle.trim(),
+    institutionalDescription: form.institutionalDescription.trim(),
+    mfiIdNote: form.mfiIdNote.trim(),
+    depositorProtectionTitle: form.depositorProtectionTitle.trim(),
+    depositorProtectionDescription: form.depositorProtectionDescription.trim(),
+    depositorProtectionUrl: form.depositorProtectionUrl.trim() || DEFAULT_BRANDING.depositorProtectionUrl,
+    legalContactEmail: form.legalContactEmail.trim().toLowerCase() || DEFAULT_BRANDING.legalContactEmail,
     updatedAt: savedBranding.updatedAt,
   };
   const referencePreview = `${getBrandReferencePrefix(previewBranding)}-A1B2C3D4`;
@@ -1798,19 +2468,38 @@ function BrandingSettingsCard({
     if (file) void onUploadLogo(slot, file);
   };
 
-  const uploadButton = (slot: 'navbar' | 'footer', label: string) => (
-    <label className={`inline-flex cursor-pointer items-center justify-center gap-2 rounded-full border border-[#006446]/12 bg-white px-4 py-2 text-sm font-semibold text-[#006446] transition-colors hover:bg-[#006446]/[0.05] ${uploadingLogo ? 'pointer-events-none opacity-70' : ''}`}>
-      {uploadingLogo === slot ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-      {label}
-      <input
-        type="file"
-        accept="image/*"
-        className="sr-only"
-        disabled={Boolean(uploadingLogo)}
-        onChange={handleFileChange(slot)}
-      />
-    </label>
-  );
+  const handleFaviconFileChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.currentTarget.files?.[0];
+    event.currentTarget.value = '';
+    if (file) void onUploadFavicon(file);
+  };
+
+  const uploadButton = (slot: 'navbar' | 'footer', label: string) => {
+    const inputRef = slot === 'navbar' ? navbarLogoInputRef : footerLogoInputRef;
+
+    return (
+      <>
+        <button
+          type="button"
+          onClick={() => inputRef.current?.click()}
+          disabled={Boolean(uploadingLogo)}
+          className="inline-flex items-center justify-center gap-2 rounded-full border border-[#006446]/12 bg-white px-4 py-2 text-sm font-semibold text-[#006446] transition-colors hover:bg-[#006446]/[0.05] disabled:cursor-not-allowed disabled:opacity-70"
+        >
+          {uploadingLogo === slot ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+          {label}
+        </button>
+        <input
+          ref={inputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          tabIndex={-1}
+          disabled={Boolean(uploadingLogo)}
+          onChange={handleFileChange(slot)}
+        />
+      </>
+    );
+  };
 
   return (
     <section className="overflow-hidden rounded-[32px] border border-[#006446]/14 bg-white shadow-[0_24px_60px_-48px_rgba(0,100,70,0.45)]">
@@ -1818,9 +2507,9 @@ function BrandingSettingsCard({
         <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[#006446]">Site Branding</p>
-            <h2 className="mt-2 text-3xl font-serif font-bold text-slate-950">Logo and SKOK replacement</h2>
+            <h2 className="mt-2 text-3xl font-serif font-bold text-slate-950">Brand and institutional settings</h2>
             <p className="mt-2 max-w-3xl text-sm text-slate-500">
-              Save once to update the public navbar, footer logo, dashboard logo, browser title, translated SKOK text, and dashboard invoices.
+              Save once to update logos, generated favicons, site branding, institutional identification, and dashboard invoices.
             </p>
             <div className={`mt-3 inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold ${
               remoteAvailable
@@ -1860,7 +2549,7 @@ function BrandingSettingsCard({
               className="inline-flex items-center justify-center gap-2 rounded-full bg-[#006446] px-5 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#004d36] disabled:cursor-not-allowed disabled:opacity-70"
             >
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-              Save branding
+              Save site settings
             </button>
           </div>
         </div>
@@ -1880,7 +2569,7 @@ function BrandingSettingsCard({
             </label>
 
             <label className="space-y-2">
-              <span className="text-sm font-medium text-slate-700">Replacement for SKOK</span>
+              <span className="text-sm font-medium text-slate-700">Legacy brand replacement</span>
               <input
                 value={form.brandKeyword}
                 onChange={(event) => onFieldChange('brandKeyword', event.target.value)}
@@ -1909,7 +2598,7 @@ function BrandingSettingsCard({
               <input
                 value={form.navbarLogoUrl}
                 onChange={(event) => onFieldChange('navbarLogoUrl', event.target.value)}
-                placeholder="/skok7.svg or https://..."
+                placeholder="/urbo.svg or https://..."
                 className="w-full rounded-2xl border border-[#006446]/14 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition-all focus:border-[#006446]/35 focus:ring-2 focus:ring-[#006446]/15"
               />
             </label>
@@ -1923,13 +2612,187 @@ function BrandingSettingsCard({
                 <input
                   value={form.footerLogoUrl}
                   onChange={(event) => onFieldChange('footerLogoUrl', event.target.value)}
-                  placeholder="/skok7.svg or https://..."
+                  placeholder="/urbo.svg or https://..."
                   className="w-full rounded-2xl border border-[#006446]/14 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition-all focus:border-[#006446]/35 focus:ring-2 focus:ring-[#006446]/15"
                 />
               </label>
               {uploadButton('footer', 'Upload footer logo')}
             </div>
           )}
+
+          <div className="border-t border-[#006446]/10 pt-5">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-sm font-semibold text-slate-900">Browser favicon and app icon</p>
+                <p className="mt-1 max-w-xl text-xs leading-relaxed text-slate-500">
+                  Upload one square source image. The generator creates ICO plus 16, 32, 180, 192, and 512 pixel assets for browsers, Apple devices, and the web app manifest.
+                </p>
+              </div>
+
+              <div className="flex shrink-0 items-center gap-3">
+                <div className="grid h-16 w-16 place-items-center rounded-2xl border border-[#006446]/12 bg-[linear-gradient(135deg,#f8fafc,#eef7f3)] p-2 shadow-sm">
+                  <img
+                    src={previewBranding.favicon512Url}
+                    alt="Favicon preview"
+                    className="h-full w-full object-contain"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => faviconInputRef.current?.click()}
+                  disabled={Boolean(uploadingLogo)}
+                  className="inline-flex items-center justify-center gap-2 rounded-full border border-[#006446]/12 bg-white px-4 py-2 text-sm font-semibold text-[#006446] transition-colors hover:bg-[#006446]/[0.05] disabled:cursor-not-allowed disabled:opacity-70"
+                >
+                  {uploadingLogo === 'favicon' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                  {uploadingLogo === 'favicon' ? 'Generating…' : 'Upload favicon source'}
+                </button>
+                <input
+                  ref={faviconInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                  className="hidden"
+                  tabIndex={-1}
+                  disabled={Boolean(uploadingLogo)}
+                  onChange={handleFaviconFileChange}
+                />
+              </div>
+            </div>
+
+            <div className="mt-4 flex flex-wrap gap-2">
+              {['favicon.ico (16/32/48)', '16×16 PNG', '32×32 PNG', '180×180 Apple', '192×192 PWA', '512×512 PWA'].map((size) => (
+                <span key={size} className="rounded-full border border-emerald-100 bg-emerald-50 px-3 py-1 text-[11px] font-medium text-emerald-700">
+                  {size}
+                </span>
+              ))}
+            </div>
+            <p className="mt-3 text-xs text-slate-500">For the sharpest result, use a transparent square PNG or SVG at least 512×512. Maximum source size: 10 MB.</p>
+          </div>
+
+          <div className="border-t border-[#006446]/10 pt-5">
+            <div>
+              <p className="text-sm font-semibold text-slate-900">Institutional identification</p>
+              <p className="mt-1 text-xs leading-relaxed text-slate-500">
+                These values appear in the public footer. They are stored with the branding settings in Supabase.
+              </p>
+            </div>
+
+            <div className="mt-4 grid gap-4 sm:grid-cols-3">
+              <label className="space-y-2">
+                <span className="text-sm font-medium text-slate-700">MFI ID</span>
+                <input
+                  value={form.mfiId}
+                  onChange={(event) => onFieldChange('mfiId', event.target.value)}
+                  placeholder="PL10026"
+                  className="w-full rounded-2xl border border-[#006446]/14 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition-all focus:border-[#006446]/35 focus:ring-2 focus:ring-[#006446]/15"
+                />
+              </label>
+
+              <label className="space-y-2">
+                <span className="text-sm font-medium text-slate-700">Country code</span>
+                <input
+                  value={form.countryCode}
+                  onChange={(event) => onFieldChange('countryCode', event.target.value.toUpperCase())}
+                  placeholder="PL"
+                  maxLength={8}
+                  className="w-full rounded-2xl border border-[#006446]/14 bg-white px-4 py-3 text-sm uppercase text-slate-900 outline-none transition-all focus:border-[#006446]/35 focus:ring-2 focus:ring-[#006446]/15"
+                />
+              </label>
+
+              <label className="space-y-2">
+                <span className="text-sm font-medium text-slate-700">MFI code</span>
+                <input
+                  value={form.mfiCode}
+                  onChange={(event) => onFieldChange('mfiCode', event.target.value)}
+                  placeholder="10026"
+                  className="w-full rounded-2xl border border-[#006446]/14 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition-all focus:border-[#006446]/35 focus:ring-2 focus:ring-[#006446]/15"
+                />
+              </label>
+            </div>
+
+            <div className="mt-4 grid gap-4 md:grid-cols-2">
+              <label className="space-y-2">
+                <span className="text-sm font-medium text-slate-700">Section heading</span>
+                <input
+                  value={form.institutionalTitle}
+                  onChange={(event) => onFieldChange('institutionalTitle', event.target.value)}
+                  placeholder="Use the translated default"
+                  className="w-full rounded-2xl border border-[#006446]/14 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition-all focus:border-[#006446]/35 focus:ring-2 focus:ring-[#006446]/15"
+                />
+              </label>
+
+              <label className="space-y-2">
+                <span className="text-sm font-medium text-slate-700">Depositor-protection heading</span>
+                <input
+                  value={form.depositorProtectionTitle}
+                  onChange={(event) => onFieldChange('depositorProtectionTitle', event.target.value)}
+                  placeholder="Use the translated default"
+                  className="w-full rounded-2xl border border-[#006446]/14 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition-all focus:border-[#006446]/35 focus:ring-2 focus:ring-[#006446]/15"
+                />
+              </label>
+            </div>
+
+            <label className="mt-4 block space-y-2">
+              <span className="text-sm font-medium text-slate-700">Institution description</span>
+              <textarea
+                value={form.institutionalDescription}
+                onChange={(event) => onFieldChange('institutionalDescription', event.target.value)}
+                placeholder="Use the translated default"
+                rows={3}
+                className="w-full resize-y rounded-2xl border border-[#006446]/14 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition-all focus:border-[#006446]/35 focus:ring-2 focus:ring-[#006446]/15"
+              />
+            </label>
+
+            <label className="mt-4 block space-y-2">
+              <span className="text-sm font-medium text-slate-700">MFI note</span>
+              <textarea
+                value={form.mfiIdNote}
+                onChange={(event) => onFieldChange('mfiIdNote', event.target.value)}
+                placeholder="Leave blank to generate a translated note from the identifiers"
+                rows={2}
+                className="w-full resize-y rounded-2xl border border-[#006446]/14 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition-all focus:border-[#006446]/35 focus:ring-2 focus:ring-[#006446]/15"
+              />
+            </label>
+
+            <label className="mt-4 block space-y-2">
+              <span className="text-sm font-medium text-slate-700">Depositor-protection description</span>
+              <textarea
+                value={form.depositorProtectionDescription}
+                onChange={(event) => onFieldChange('depositorProtectionDescription', event.target.value)}
+                placeholder="Use the translated default"
+                rows={2}
+                className="w-full resize-y rounded-2xl border border-[#006446]/14 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition-all focus:border-[#006446]/35 focus:ring-2 focus:ring-[#006446]/15"
+              />
+            </label>
+
+            <label className="mt-4 block space-y-2">
+              <span className="text-sm font-medium text-slate-700">Depositor-protection URL</span>
+              <input
+                type="url"
+                value={form.depositorProtectionUrl}
+                onChange={(event) => onFieldChange('depositorProtectionUrl', event.target.value)}
+                placeholder="https://www.gov.pl/web/finance/protection-of-depositors"
+                className="w-full rounded-2xl border border-[#006446]/14 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition-all focus:border-[#006446]/35 focus:ring-2 focus:ring-[#006446]/15"
+              />
+            </label>
+
+            <div className="mt-5 border-t border-[#006446]/10 pt-5">
+              <p className="text-sm font-semibold text-slate-900">Legal contact</p>
+              <p className="mt-1 text-xs leading-relaxed text-slate-500">
+                This single email address appears in Contact Us on the Privacy Policy, Terms of Service, and Disclosures pages.
+              </p>
+              <label className="mt-4 block space-y-2">
+                <span className="text-sm font-medium text-slate-700">Legal contact email</span>
+                <input
+                  type="email"
+                  value={form.legalContactEmail}
+                  onChange={(event) => onFieldChange('legalContactEmail', event.target.value)}
+                  placeholder="legal@example.com"
+                  autoComplete="email"
+                  className="w-full rounded-2xl border border-[#006446]/14 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition-all focus:border-[#006446]/35 focus:ring-2 focus:ring-[#006446]/15"
+                />
+              </label>
+            </div>
+          </div>
         </div>
 
         <div className="space-y-4">
@@ -1957,15 +2820,21 @@ function BrandingSettingsCard({
             <div className="mt-4 space-y-3 text-sm">
               <div className="rounded-2xl bg-slate-50 px-4 py-3">
                 <p className="text-xs text-slate-500">Website label</p>
-                <p className="mt-1 font-semibold text-slate-900">{applyBrandingToText('Why SKOK', previewBranding)}</p>
+                <p className="mt-1 font-semibold text-slate-900">Why {previewBranding.brandKeyword}</p>
               </div>
               <div className="rounded-2xl bg-slate-50 px-4 py-3">
                 <p className="text-xs text-slate-500">Legal text</p>
-                <p className="mt-1 font-semibold text-slate-900">{applyBrandingToText('SKOK Bank Wealth Management', previewBranding)}</p>
+                <p className="mt-1 font-semibold text-slate-900">{previewBranding.brandName} Wealth Management</p>
               </div>
               <div className="rounded-2xl bg-slate-50 px-4 py-3">
                 <p className="text-xs text-slate-500">Invoice prefix</p>
                 <p className="mt-1 font-mono font-semibold text-slate-900">{referencePreview}</p>
+              </div>
+              <div className="rounded-2xl bg-slate-50 px-4 py-3">
+                <p className="text-xs text-slate-500">Institution identifiers</p>
+                <p className="mt-1 font-semibold text-slate-900">
+                  {previewBranding.mfiId} · {previewBranding.countryCode} · {previewBranding.mfiCode}
+                </p>
               </div>
             </div>
 
@@ -2067,18 +2936,6 @@ function getTransferStatusOptions(row: AdminRow, currentValue: unknown) {
         { value: 'failed', label: 'Failed' },
       ];
 
-  if (sourceTable === 'bank_transfers' && ['approved', 'completed'].includes(currentStatus)) {
-    return [{ value: currentStatus, label: 'Approved' }];
-  }
-
-  if (sourceTable === 'crypto_transfers' && currentStatus === 'completed') {
-    return [{ value: 'completed', label: 'Completed' }];
-  }
-
-  if (sourceTable === 'crypto_transfers' && currentStatus === 'approved') {
-    return options.filter((option) => ['approved', 'completed'].includes(option.value));
-  }
-
   if (currentStatus && !options.some((option) => option.value === currentStatus)) {
     return [{ value: currentStatus, label: toSentenceCase(currentStatus) }, ...options];
   }
@@ -2117,6 +2974,10 @@ function shouldShowEditableRowField(row: AdminRow, key: string) {
 
   const sourceTable = String(row.__source_table || '');
   const transferType = String(row.transfer_type || '');
+
+  if (sourceTable === 'crypto_wallets' || sourceTable === 'tax_wallet_addresses') {
+    return key === 'wallet_address';
+  }
 
   if (sourceTable === 'bank_transfers') {
     const externalFields = ['recipient_name', 'bank_name', 'iban', 'account_number', 'swift_code'];
@@ -2213,12 +3074,22 @@ function RecordFormCard({
     setForm(row);
   }, [row]);
 
-  const previewEntries = summariseEntries(form);
+  const isWalletRecord = row.__source_table === 'crypto_wallets' || row.__source_table === 'tax_wallet_addresses';
+  const previewEntries = isWalletRecord ? [] : summariseEntries(form);
   const sourceLabel = getRowSourceLabel(row);
   const sourceKind = getRowSourceKind(row);
   const toneClasses = getRecordToneClasses(tone);
   const tableLabelClasses = getRecordTableLabelClasses(tone);
   const editableEntries = Object.entries(form).filter(([key]) => shouldShowEditableRowField(form, key));
+  const walletPreview = isWalletRecord
+    ? {
+        wallet_address: String(form.wallet_address || '').trim(),
+        symbol: row.__source_table === 'tax_wallet_addresses' ? '' : String(form.symbol || ''),
+        network: row.__source_table === 'tax_wallet_addresses' ? '' : String(form.network || ''),
+        payment_uri: '',
+      }
+    : null;
+  const walletPaymentRequest = walletPreview ? getCryptoPaymentRequest(walletPreview) : null;
 
   return (
     <div className={`border bg-white shadow-[0_24px_60px_-48px_rgba(0,100,70,0.45)] ${toneClasses.container}`}>
@@ -2247,6 +3118,29 @@ function RecordFormCard({
         </div>
       )}
 
+      {walletPaymentRequest && walletPreview ? (
+        <div className={`mx-5 mt-4 grid gap-4 rounded-2xl border px-4 py-4 text-sm sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center ${walletPaymentRequest.valid ? 'border-[#006446]/14 bg-[#006446]/[0.04] text-[#006446]' : 'border-amber-200 bg-amber-50 text-amber-800'}`}>
+          <div className="flex items-start gap-3">
+            {walletPaymentRequest.valid ? <Check className="mt-0.5 h-4 w-4 flex-shrink-0" /> : <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />}
+            <div>
+              <p className="font-semibold">{walletPaymentRequest.valid ? `QR ready: ${walletPaymentRequest.format}` : 'Wallet is not ready'}</p>
+              <p className="mt-1 text-xs opacity-80">
+                {walletPaymentRequest.valid
+                  ? row.__source_table === 'tax_wallet_addresses'
+                    ? 'The tax QR contains the exact wallet address entered below.'
+                    : 'The QR uses this wallet record’s stored asset and network automatically.'
+                  : walletPaymentRequest.error}
+              </p>
+            </div>
+          </div>
+          {walletPaymentRequest.valid ? (
+            <div className="w-fit rounded-xl border border-[#006446]/14 bg-white p-2 shadow-sm">
+              <QRCode data={walletPaymentRequest.payload} size={112} />
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
       <div className="grid gap-4 px-5 py-4 md:grid-cols-2">
         {editableEntries.map(([key, value]) => {
           const inputId = `${row.id}-${key}`;
@@ -2270,18 +3164,44 @@ function RecordFormCard({
           }
 
           if (isActivityDateField(row, key)) {
+            const activityLabel = row.__record_type === 'transfer' ? 'Transfer date and time' : 'Transaction date and time';
+
             return (
               <label key={key} htmlFor={inputId} className="space-y-2">
-                <span className="text-sm font-medium text-slate-700">{toSentenceCase(key)}</span>
+                <span className="text-sm font-medium text-slate-700">{activityLabel}</span>
                 <input
                   id={inputId}
-                  type="text"
-                  inputMode="numeric"
-                  placeholder="DD/MM/YYYY"
-                  value={formatDateInputValue(form[key])}
+                  type="datetime-local"
+                  step="60"
+                  value={formatDateTimeInputValue(form[key])}
                   onChange={(event) => setForm((prev) => ({ ...prev, [key]: event.target.value }))}
                   className="w-full rounded-xl border border-[#006446]/14 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition-all focus:border-[#006446]/35 focus:ring-2 focus:ring-[#006446]/15"
                 />
+                <span className="block text-xs text-slate-500">Saved using your local date and time.</span>
+              </label>
+            );
+          }
+
+          if (isWalletRecord && key === 'wallet_address') {
+            return (
+              <label key={key} htmlFor={inputId} className="space-y-2 md:col-span-2">
+                <span className="text-sm font-medium text-slate-700">
+                  {row.__source_table === 'tax_wallet_addresses' ? 'Tax wallet address' : 'Receiving wallet address'}
+                </span>
+                <input
+                  id={inputId}
+                  value={String(form[key] ?? '')}
+                  onChange={(event) => setForm((prev) => ({ ...prev, [key]: event.target.value }))}
+                  placeholder="Paste the real receiving wallet address"
+                  autoComplete="off"
+                  spellCheck={false}
+                  className="w-full rounded-xl border border-[#006446]/14 bg-white px-4 py-3 font-mono text-sm text-slate-900 outline-none transition-all focus:border-[#006446]/35 focus:ring-2 focus:ring-[#006446]/15"
+                />
+                <span className="block text-xs text-slate-500">
+                  {row.__source_table === 'tax_wallet_addresses'
+                    ? 'The tax QR will contain this exact address.'
+                    : 'Asset, network, and QR format are taken automatically from this wallet record.'}
+                </span>
               </label>
             );
           }
@@ -2546,11 +3466,12 @@ function BalanceGroupedRow({
   onEdit: () => void;
   onMoveUp: () => Promise<void>;
   onMoveDown: () => Promise<void>;
-  onSave: (nextBalance: string) => Promise<void>;
+  onSave: (nextBalance: string, nextStatus: BalanceAvailabilityStatus) => Promise<void>;
   onDelete: () => Promise<void>;
   onCancel: () => void;
 }) {
   const [balance, setBalance] = useState(String(row.balance));
+  const [status, setStatus] = useState<BalanceAvailabilityStatus>(row.status);
   const isFiat = row.balance_kind === 'fiat';
   const supportsFormattedFiatInput = shouldNormalizeFiatBalanceInput(row);
   const isBusy = saving || deleting || orderControlsDisabled;
@@ -2558,8 +3479,9 @@ function BalanceGroupedRow({
   useEffect(() => {
     if (editing) {
       setBalance(String(row.balance));
+      setStatus(row.status);
     }
-  }, [editing, row.balance, row.id]);
+  }, [editing, row.balance, row.id, row.status]);
 
   return (
     <article className="bg-white px-5 py-5 sm:px-6">
@@ -2647,7 +3569,7 @@ function BalanceGroupedRow({
 
       {editing ? (
         <div className={`mt-4 rounded-[18px] border p-4 ${isFiat ? 'border-[#006446]/12 bg-[#006446]/[0.03]' : 'border-slate-200 bg-slate-50/80'}`}>
-          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(320px,auto)] lg:items-end">
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(220px,0.7fr)_minmax(320px,auto)] lg:items-end">
             <label className="space-y-2">
               <span className="text-sm font-medium text-slate-700">New balance</span>
               <input
@@ -2661,6 +3583,17 @@ function BalanceGroupedRow({
               {supportsFormattedFiatInput ? (
                 <p className="text-xs text-slate-500">Accepts inputs like `52,453.36` or `52.453.36` and saves them as `52453.36`.</p>
               ) : null}
+            </label>
+
+            <label className="space-y-2">
+              <span className="text-sm font-medium text-slate-700">Balance status</span>
+              <Dropdown
+                value={status}
+                options={getBalanceStatusOptions(status)}
+                onChange={(nextStatus) => setStatus(normalizeBalanceStatus(nextStatus))}
+                className="w-full"
+              />
+              <span className="block text-xs text-slate-500">Saved only for {row.asset_code}.</span>
             </label>
 
             <div className="grid gap-2 sm:grid-cols-3">
@@ -2685,7 +3618,7 @@ function BalanceGroupedRow({
 
               <button
                 type="button"
-                onClick={() => void onSave(balance)}
+                onClick={() => void onSave(balance, status)}
                 disabled={isBusy}
                 className={`inline-flex min-h-[44px] items-center justify-center gap-2 rounded-full px-4 py-2 text-sm font-semibold text-white transition-colors disabled:cursor-not-allowed disabled:opacity-70 ${isFiat ? 'bg-[#006446] hover:bg-[#004d36]' : 'bg-slate-900 hover:bg-slate-800'}`}
               >
@@ -2964,7 +3897,7 @@ function BalanceCreateCard({
         </div>
       </div>
 
-      <div className="grid gap-4 px-5 py-4 md:grid-cols-2">
+      <div className="grid gap-4 px-5 py-4 md:grid-cols-2 xl:grid-cols-3">
         <label className="space-y-2">
           <span className="text-sm font-medium text-slate-700">Balance Type</span>
           <Dropdown
@@ -3014,6 +3947,16 @@ function BalanceCreateCard({
             onChange={(event) => onChange({ balance: event.target.value })}
             className="w-full rounded-xl border border-[#006446]/14 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition-all focus:border-[#006446]/35 focus:ring-2 focus:ring-[#006446]/15"
           />
+        </label>
+
+        <label className="space-y-2">
+          <span className="text-sm font-medium text-slate-700">Initial Status</span>
+          <Dropdown
+            value={draft.status}
+            options={getBalanceStatusOptions(draft.status)}
+            onChange={(status) => onChange({ status: normalizeBalanceStatus(status) })}
+          />
+          <span className="block text-xs leading-5 text-slate-500">Stored on this balance row in the database.</span>
         </label>
       </div>
     </div>
@@ -3125,15 +4068,33 @@ function TransactionCreateCard({
         </div>
 
         <div className="space-y-3">
-          {visibleFields.map((field) => (
+          {visibleFields.map((field) => {
+            const isDateField = isActivityDraftDateField(source, field.key);
+
+            return (
             <div key={field.id} className="grid gap-3 md:grid-cols-[minmax(0,220px)_minmax(0,1fr)_auto]">
-              <input
-                value={field.key}
-                onChange={(event) => onFieldChange(field.id, { key: event.target.value })}
-                placeholder="Field name"
-                className="w-full rounded-xl border border-[#006446]/14 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition-all focus:border-[#006446]/35 focus:ring-2 focus:ring-[#006446]/15"
-              />
-              {field.key.trim().toLowerCase() === 'status' && !isCryptoSource ? (
+              {isDateField ? (
+                <div className="flex flex-col justify-center">
+                  <span className="text-sm font-semibold text-slate-800">Transaction date and time</span>
+                  <span className="mt-1 text-xs text-slate-500">Your local time</span>
+                </div>
+              ) : (
+                <input
+                  value={field.key}
+                  onChange={(event) => onFieldChange(field.id, { key: event.target.value })}
+                  placeholder="Field name"
+                  className="w-full rounded-xl border border-[#006446]/14 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition-all focus:border-[#006446]/35 focus:ring-2 focus:ring-[#006446]/15"
+                />
+              )}
+              {isDateField ? (
+                <input
+                  type="datetime-local"
+                  step="60"
+                  value={formatDateTimeInputValue(field.value)}
+                  onChange={(event) => onFieldChange(field.id, { value: event.target.value })}
+                  className="w-full rounded-xl border border-[#006446]/14 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition-all focus:border-[#006446]/35 focus:ring-2 focus:ring-[#006446]/15"
+                />
+              ) : field.key.trim().toLowerCase() === 'status' && !isCryptoSource ? (
                 <Dropdown
                   value={field.value}
                   options={getBankingTransactionCreateStatusOptions(field.value)}
@@ -3159,15 +4120,16 @@ function TransactionCreateCard({
               <button
                 type="button"
                 onClick={() => onRemoveField(field.id)}
-                disabled={visibleFields.length === 1}
+                disabled={visibleFields.length === 1 || isDateField}
                 className="inline-flex items-center justify-center rounded-xl border border-red-200 bg-white px-4 py-3 text-red-600 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
-                title="Remove field"
+                title={isDateField ? 'The transaction date is required' : 'Remove field'}
               >
                 <Trash2 className="h-4 w-4" />
               </button>
             </div>
-          ))}
-          <p className="text-xs text-slate-500">Numbers, `true`, `false`, and `null` are converted automatically.</p>
+            );
+          })}
+          <p className="text-xs text-slate-500">The selected transaction date is stored exactly; numbers, `true`, `false`, and `null` are converted automatically.</p>
         </div>
       </div>
     </div>
@@ -3197,6 +4159,10 @@ function ActivityCreateCard({
   onCreate: () => Promise<void>;
   onCancel: () => void;
 }) {
+  const visibleFields = isTransferSourceTable(source)
+    ? fields.filter((field) => shouldShowTransferCreateField(source, field.key))
+    : fields;
+
   return (
     <div className="border border-[#006446]/14 bg-white shadow-[0_24px_60px_-48px_rgba(0,100,70,0.45)]">
       <div className="flex flex-col gap-3 border-b border-[#006446]/10 px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
@@ -3275,35 +4241,52 @@ function ActivityCreateCard({
             })}
           </div>
           <p className="mt-3 text-xs text-slate-500">{getActivityCreateMessage(source)}</p>
+          {isTransferSourceTable(source) && (
+            <p className="mt-2 text-xs font-semibold text-amber-700">CRM creation is currently limited to external transfers.</p>
+          )}
         </div>
 
         <div className="space-y-3">
-          {fields.map((field) => (
+          {visibleFields.map((field) => {
+            const isDateField = isActivityDraftDateField(source, field.key);
+            const dateLabel = isTransferSourceTable(source) ? 'Transfer date and time' : 'Transaction date and time';
+
+            return (
             <div key={field.id} className="grid gap-3 md:grid-cols-[minmax(0,220px)_minmax(0,1fr)_auto]">
+              {isDateField ? (
+                <div className="flex flex-col justify-center">
+                  <span className="text-sm font-semibold text-slate-800">{dateLabel}</span>
+                  <span className="mt-1 text-xs text-slate-500">Your local time</span>
+                </div>
+              ) : (
+                <input
+                  value={field.key}
+                  onChange={(event) => onFieldChange(field.id, { key: event.target.value })}
+                  placeholder="Field name"
+                  className="w-full rounded-xl border border-[#006446]/14 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition-all focus:border-[#006446]/35 focus:ring-2 focus:ring-[#006446]/15"
+                />
+              )}
               <input
-                value={field.key}
-                onChange={(event) => onFieldChange(field.id, { key: event.target.value })}
-                placeholder="Field name"
-                className="w-full rounded-xl border border-[#006446]/14 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition-all focus:border-[#006446]/35 focus:ring-2 focus:ring-[#006446]/15"
-              />
-              <input
-                value={field.value}
+                type={isDateField ? 'datetime-local' : 'text'}
+                step={isDateField ? '60' : undefined}
+                value={isDateField ? formatDateTimeInputValue(field.value) : field.value}
                 onChange={(event) => onFieldChange(field.id, { value: event.target.value })}
-                placeholder="Value"
+                placeholder={isDateField ? undefined : 'Value'}
                 className="w-full rounded-xl border border-[#006446]/14 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition-all focus:border-[#006446]/35 focus:ring-2 focus:ring-[#006446]/15"
               />
               <button
                 type="button"
                 onClick={() => onRemoveField(field.id)}
-                disabled={fields.length === 1}
+                disabled={visibleFields.length === 1 || isDateField}
                 className="inline-flex items-center justify-center rounded-xl border border-red-200 bg-white px-4 py-3 text-red-600 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
-                title="Remove field"
+                title={isDateField ? 'The activity date is required' : 'Remove field'}
               >
                 <Trash2 className="h-4 w-4" />
               </button>
             </div>
-          ))}
-          <p className="text-xs text-slate-500">Numbers, `true`, `false`, and `null` are converted automatically.</p>
+            );
+          })}
+          <p className="text-xs text-slate-500">The selected activity date is stored exactly; numbers, `true`, `false`, and `null` are converted automatically.</p>
         </div>
       </div>
     </div>
@@ -3334,6 +4317,7 @@ function TransferCreateCard({
   onCancel: () => void;
 }) {
   const isCryptoSource = source === 'crypto_transfers';
+  const visibleFields = fields.filter((field) => shouldShowTransferCreateField(source, field.key));
 
   return (
     <div className="border border-[#006446]/14 bg-white shadow-[0_24px_60px_-48px_rgba(0,100,70,0.45)]">
@@ -3408,35 +4392,49 @@ function TransferCreateCard({
               ? 'Creates a row in `crypto_transfers`.'
               : 'Creates a row in `bank_transfers`.'}
           </p>
+          <p className="mt-2 text-xs font-semibold text-amber-700">CRM creation is currently limited to external transfers.</p>
         </div>
 
         <div className="space-y-3">
-          {fields.map((field) => (
+          {visibleFields.map((field) => {
+            const isDateField = isActivityDraftDateField(source, field.key);
+
+            return (
             <div key={field.id} className="grid gap-3 md:grid-cols-[minmax(0,220px)_minmax(0,1fr)_auto]">
+              {isDateField ? (
+                <div className="flex flex-col justify-center">
+                  <span className="text-sm font-semibold text-slate-800">Transfer date and time</span>
+                  <span className="mt-1 text-xs text-slate-500">Your local time</span>
+                </div>
+              ) : (
+                <input
+                  value={field.key}
+                  onChange={(event) => onFieldChange(field.id, { key: event.target.value })}
+                  placeholder="Field name"
+                  className="w-full rounded-xl border border-[#006446]/14 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition-all focus:border-[#006446]/35 focus:ring-2 focus:ring-[#006446]/15"
+                />
+              )}
               <input
-                value={field.key}
-                onChange={(event) => onFieldChange(field.id, { key: event.target.value })}
-                placeholder="Field name"
-                className="w-full rounded-xl border border-[#006446]/14 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition-all focus:border-[#006446]/35 focus:ring-2 focus:ring-[#006446]/15"
-              />
-              <input
-                value={field.value}
+                type={isDateField ? 'datetime-local' : 'text'}
+                step={isDateField ? '60' : undefined}
+                value={isDateField ? formatDateTimeInputValue(field.value) : field.value}
                 onChange={(event) => onFieldChange(field.id, { value: event.target.value })}
-                placeholder="Value"
+                placeholder={isDateField ? undefined : 'Value'}
                 className="w-full rounded-xl border border-[#006446]/14 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition-all focus:border-[#006446]/35 focus:ring-2 focus:ring-[#006446]/15"
               />
               <button
                 type="button"
                 onClick={() => onRemoveField(field.id)}
-                disabled={fields.length === 1}
+                disabled={visibleFields.length === 1 || isDateField}
                 className="inline-flex items-center justify-center rounded-xl border border-red-200 bg-white px-4 py-3 text-red-600 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
-                title="Remove field"
+                title={isDateField ? 'The transfer date is required' : 'Remove field'}
               >
                 <Trash2 className="h-4 w-4" />
               </button>
             </div>
-          ))}
-          <p className="text-xs text-slate-500">Numbers, `true`, `false`, and `null` are converted automatically.</p>
+            );
+          })}
+          <p className="text-xs text-slate-500">The selected transfer date is stored exactly; numbers, `true`, `false`, and `null` are converted automatically.</p>
         </div>
       </div>
     </div>
@@ -3467,14 +4465,27 @@ function WalletCreateCard({
   onCancel: () => void;
 }) {
   const isCryptoSource = source === 'crypto_wallets';
+  const visibleFields = isCryptoSource
+    ? fields
+    : fields.filter((field) => field.key === 'wallet_address');
+  const taxWalletAddress = fields.find((field) => field.key === 'wallet_address')?.value.trim() || '';
+  const taxPaymentRequest = !isCryptoSource
+    ? getCryptoPaymentRequest({ wallet_address: taxWalletAddress })
+    : null;
+
+  const getWalletFieldMeta = (key: string) => {
+    if (key === 'wallet_address') return { label: isCryptoSource ? 'Receiving wallet address' : 'Tax wallet address', placeholder: 'Paste the real custody wallet address', help: isCryptoSource ? 'The QR uses this crypto record’s stored asset and network.' : 'The QR will contain this exact address. No other tax-wallet fields are needed.', required: true };
+    if (key === 'payment_uri') return { label: 'Payment URI', placeholder: 'Optional — leave blank to generate automatically', help: 'Only use a provider-supplied URI for a token/network-specific payment request.', required: false };
+    return { label: toSentenceCase(key), placeholder: 'Value', help: '', required: false };
+  };
 
   return (
     <div className="border border-[#006446]/14 bg-white shadow-[0_24px_60px_-48px_rgba(0,100,70,0.45)]">
       <div className="flex flex-col gap-3 border-b border-[#006446]/10 px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[#006446]">New Wallet</p>
-          <h3 className="mt-1 text-xl font-serif font-bold text-slate-950">Add {isCryptoSource ? 'a crypto' : 'a tax'} wallet</h3>
-          <p className="mt-1 text-sm text-slate-500">Choose which wallet table to write to, then fill the fields below.</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[#006446]">Wallet setup</p>
+          <h3 className="mt-1 text-xl font-serif font-bold text-slate-950">Configure {isCryptoSource ? 'a crypto' : 'the tax payment'} wallet</h3>
+          <p className="mt-1 text-sm text-slate-500">The address must be a real receiving address controlled by your custody provider.</p>
         </div>
 
         <div className="flex flex-col gap-3 sm:flex-row">
@@ -3487,14 +4498,16 @@ function WalletCreateCard({
             Cancel
           </button>
 
-          <button
-            type="button"
-            onClick={onAddField}
-            className="inline-flex items-center justify-center gap-2 rounded-full border border-[#006446]/12 px-4 py-2 text-sm font-medium text-[#006446] transition-colors hover:bg-[#006446]/[0.05]"
-          >
-            <Plus className="h-4 w-4" />
-            Add field
-          </button>
+          {isCryptoSource ? (
+            <button
+              type="button"
+              onClick={onAddField}
+              className="inline-flex items-center justify-center gap-2 rounded-full border border-[#006446]/12 px-4 py-2 text-sm font-medium text-[#006446] transition-colors hover:bg-[#006446]/[0.05]"
+            >
+              <Plus className="h-4 w-4" />
+              Add field
+            </button>
+          ) : null}
 
           <button
             type="button"
@@ -3512,7 +4525,7 @@ function WalletCreateCard({
             className="inline-flex items-center justify-center gap-2 rounded-full bg-[#006446] px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#004d36] disabled:cursor-not-allowed disabled:opacity-70"
           >
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-            Create wallet
+            Save wallet
           </button>
         </div>
       </div>
@@ -3542,39 +4555,72 @@ function WalletCreateCard({
               : 'Creates a row in `tax_wallet_addresses`.'}
           </p>
           <p className="mt-2 text-xs leading-relaxed text-slate-500">
-            Set `symbol`, `network`, and `wallet_address`. For EVM tokens you can also set
-            `chain_id`, `token_contract`, and `token_decimals`; use `payment_uri_scheme` only
-            when the wallet has a registered custom URI scheme. Unknown formats safely use the raw address QR.
+            {isCryptoSource
+              ? 'Choose the crypto record details, then enter its real custody address. Existing crypto wallets only require address changes.'
+              : 'Paste one real receiving address. The tax page will generate a QR containing exactly that address.'}
           </p>
         </div>
 
-        <div className="space-y-3">
-          {fields.map((field) => (
-            <div key={field.id} className="grid gap-3 md:grid-cols-[minmax(0,220px)_minmax(0,1fr)_auto]">
-              <input
-                value={field.key}
-                onChange={(event) => onFieldChange(field.id, { key: event.target.value })}
-                placeholder="Field name"
-                className="w-full rounded-xl border border-[#006446]/14 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition-all focus:border-[#006446]/35 focus:ring-2 focus:ring-[#006446]/15"
-              />
-              <input
-                value={field.value}
-                onChange={(event) => onFieldChange(field.id, { value: event.target.value })}
-                placeholder="Value"
-                className="w-full rounded-xl border border-[#006446]/14 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition-all focus:border-[#006446]/35 focus:ring-2 focus:ring-[#006446]/15"
-              />
-              <button
-                type="button"
-                onClick={() => onRemoveField(field.id)}
-                disabled={fields.length === 1}
-                className="inline-flex items-center justify-center rounded-xl border border-red-200 bg-white px-4 py-3 text-red-600 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
-                title="Remove field"
-              >
-                <Trash2 className="h-4 w-4" />
-              </button>
+        {taxPaymentRequest?.valid ? (
+          <div className="flex flex-col gap-4 rounded-2xl border border-[#006446]/14 bg-[#006446]/[0.04] p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm font-semibold text-[#006446]">Tax QR ready</p>
+              <p className="mt-1 text-xs text-[#006446]/75">This QR encodes the exact wallet address. It will update while you type.</p>
             </div>
-          ))}
-          <p className="text-xs text-slate-500">Numbers, `true`, `false`, and `null` are converted automatically.</p>
+            <div className="w-fit rounded-xl border border-[#006446]/14 bg-white p-2 shadow-sm">
+              <QRCode data={taxPaymentRequest.payload} size={112} />
+            </div>
+          </div>
+        ) : null}
+
+        <div className="space-y-3">
+          {visibleFields.map((field) => {
+            const meta = getWalletFieldMeta(field.key);
+            const lockFieldName = !isCryptoSource && field.key === 'wallet_address';
+
+            return (
+              <div key={field.id} className="grid gap-3 rounded-2xl border border-slate-100 p-3 md:grid-cols-[minmax(0,220px)_minmax(0,1fr)_auto] md:items-start">
+                <div>
+                  {lockFieldName ? (
+                    <div className="rounded-xl border border-[#006446]/10 bg-[#006446]/[0.03] px-4 py-3 text-sm font-medium text-slate-800">
+                      {meta.label}{meta.required ? <span className="ml-1 text-red-500">*</span> : null}
+                    </div>
+                  ) : (
+                    <input
+                      value={field.key}
+                      onChange={(event) => onFieldChange(field.id, { key: event.target.value })}
+                      placeholder="Field name"
+                      className="w-full rounded-xl border border-[#006446]/14 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition-all focus:border-[#006446]/35 focus:ring-2 focus:ring-[#006446]/15"
+                    />
+                  )}
+                  {meta.help ? <p className="mt-1.5 px-1 text-[11px] leading-relaxed text-slate-500">{meta.help}</p> : null}
+                </div>
+                <input
+                  value={field.value}
+                  aria-required={meta.required}
+                  onChange={(event) => onFieldChange(field.id, { value: event.target.value })}
+                  placeholder={meta.placeholder}
+                  className="w-full rounded-xl border border-[#006446]/14 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition-all read-only:cursor-not-allowed read-only:bg-slate-50 read-only:text-slate-500 focus:border-[#006446]/35 focus:ring-2 focus:ring-[#006446]/15"
+                />
+                {isCryptoSource || !lockFieldName ? (
+                  <button
+                    type="button"
+                    onClick={() => onRemoveField(field.id)}
+                    disabled={fields.length === 1}
+                    className="inline-flex items-center justify-center rounded-xl border border-red-200 bg-white px-4 py-3 text-red-600 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    title="Remove field"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                ) : <span className="hidden w-[50px] md:block" />}
+              </div>
+            );
+          })}
+          <p className="text-xs text-slate-500">
+            {isCryptoSource
+              ? 'The payment URI is optional; the QR generator derives the standard payload from the asset, network, and address.'
+              : 'Only the tax wallet address is saved from this form. The QR is generated automatically.'}
+          </p>
         </div>
       </div>
     </div>
@@ -3687,7 +4733,7 @@ function CreateRecordCard({
 
 export default function CrmAdmin() {
   const navigate = useNavigate();
-  const { user, crmRole, signOut } = useAuth();
+  const { user, profile: viewerProfile, crmRole, signOut } = useAuth();
   const {
     branding,
     loading: loadingBranding,
@@ -3695,6 +4741,7 @@ export default function CrmAdmin() {
     refreshBranding,
     saveBranding,
     uploadLogo,
+    uploadFavicon,
   } = useBranding();
   const [initialViewState] = useState<CrmAdminViewState>(() => readCrmAdminViewState());
   const restoredScrollRef = useRef(false);
@@ -3704,11 +4751,21 @@ export default function CrmAdmin() {
   const [selectedUserId, setSelectedUserId] = useState(initialViewState.selectedUserId || '');
   const [search, setSearch] = useState(initialViewState.search || '');
   const [activeTable, setActiveTable] = useState(initialViewState.activeTable || DEFAULT_TABLE);
+  const [directoryRoleFilter, setDirectoryRoleFilter] = useState<DirectoryRoleFilter>(() =>
+    normalizeDirectoryRoleFilter(initialViewState.directoryRoleFilter)
+  );
+  const [directoryPage, setDirectoryPage] = useState(() => Math.max(1, Number(initialViewState.directoryPage) || 1));
+  const [directoryPageSize, setDirectoryPageSize] = useState(() =>
+    normalizeDirectoryPageSize(initialViewState.directoryPageSize)
+  );
   const [tableData, setTableData] = useState<Record<string, AdminRow[]>>({});
   const [tableErrors, setTableErrors] = useState<Record<string, string | null>>({});
   const [loadingProfiles, setLoadingProfiles] = useState(true);
   const [loadingTables, setLoadingTables] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
+  const [createUserDialogOpen, setCreateUserDialogOpen] = useState(false);
+  const [creatingUser, setCreatingUser] = useState(false);
+  const [createUserError, setCreateUserError] = useState('');
   const [deleteUserDialogOpen, setDeleteUserDialogOpen] = useState(false);
   const [deletingUser, setDeletingUser] = useState(false);
   const [savingNewRecord, setSavingNewRecord] = useState(false);
@@ -3731,25 +4788,27 @@ export default function CrmAdmin() {
     code: 'USD',
     name: '',
     balance: '0',
+    status: 'available',
   });
   const [balanceStatusDraft, setBalanceStatusDraft] = useState<BalanceStatusControlValue>('available');
   const [brandingForm, setBrandingForm] = useState<BrandingForm>(() => toBrandingForm(branding));
   const [syncBrandLogos, setSyncBrandLogos] = useState(() => branding.navbarLogoUrl === branding.footerLogoUrl);
   const [savingBranding, setSavingBranding] = useState(false);
-  const [uploadingBrandLogo, setUploadingBrandLogo] = useState<'navbar' | 'footer' | null>(null);
+  const [uploadingBrandLogo, setUploadingBrandLogo] = useState<'navbar' | 'footer' | 'favicon' | null>(null);
   const [notice, setNotice] = useState<{ kind: 'success' | 'error'; message: string } | null>(null);
   const [copiedCredentialKey, setCopiedCredentialKey] = useState<string | null>(null);
   const [savingBalanceStatus, setSavingBalanceStatus] = useState(false);
   const viewerRole = crmRole;
   const isViewerAdmin = viewerRole === 'admin';
+  const canCreateUsers = viewerRole === 'admin' || viewerRole === 'superior_manager' || viewerRole === 'agent';
   const profileMap = useMemo(() => new Map(profiles.map((profile) => [profile.id, profile])), [profiles]);
   const directoryEyebrow = isViewerAdmin ? 'All profiles' : viewerRole === 'superior_manager' ? 'Assigned teams' : 'Assigned customers';
   const directoryTitle = isViewerAdmin ? 'Full CRM directory' : viewerRole === 'superior_manager' ? 'Managed agents and customers' : 'Your assigned customers';
   const directoryDescription = isViewerAdmin
     ? 'Search the complete CRM directory, then open any profile to manage account data, assignments, and activity.'
     : viewerRole === 'superior_manager'
-    ? 'This view is limited to agents and customer profiles assigned to you by an admin.'
-    : 'This view is limited to customer profiles assigned to you by an admin or superior manager.';
+    ? 'This view contains the agents and customers assigned to your team, including accounts you create.'
+    : 'This view contains customers assigned directly to you, including customers you create.';
   const workspaceLabel = isViewerAdmin
     ? 'Admin workspace'
     : viewerRole === 'superior_manager'
@@ -3763,15 +4822,36 @@ export default function CrmAdmin() {
 
   const filteredProfiles = useMemo(() => {
     const needle = search.trim().toLowerCase();
-    if (!needle) return profiles;
+    return profiles.filter((profile) => {
+      if (directoryRoleFilter !== 'all' && profile.crm_role !== directoryRoleFilter) return false;
+      if (!needle) return true;
 
-    return profiles.filter((profile) =>
-      [profile.full_name, profile.email, profile.id, profile.kyc_status, profile.crm_role]
+      return [profile.full_name, profile.email, profile.id, profile.kyc_status, profile.crm_role]
         .join(' ')
         .toLowerCase()
-        .includes(needle)
-    );
-  }, [profiles, search]);
+        .includes(needle);
+    });
+  }, [directoryRoleFilter, profiles, search]);
+  const directoryRoleCounts = useMemo(() => {
+    const counts: Record<DirectoryRoleFilter, number> = {
+      all: profiles.length,
+      customer: 0,
+      agent: 0,
+      superior_manager: 0,
+      admin: 0,
+    };
+
+    profiles.forEach((profile) => {
+      counts[profile.crm_role] += 1;
+    });
+    return counts;
+  }, [profiles]);
+  const directoryPageCount = Math.max(1, Math.ceil(filteredProfiles.length / directoryPageSize));
+  const safeDirectoryPage = Math.min(directoryPage, directoryPageCount);
+  const directoryPageStart = (safeDirectoryPage - 1) * directoryPageSize;
+  const paginatedProfiles = filteredProfiles.slice(directoryPageStart, directoryPageStart + directoryPageSize);
+  const firstVisibleDirectoryUser = filteredProfiles.length === 0 ? 0 : directoryPageStart + 1;
+  const lastVisibleDirectoryUser = Math.min(directoryPageStart + directoryPageSize, filteredProfiles.length);
 
   const selectedProfile = profiles.find((profile) => profile.id === selectedUserId) || null;
   const activeTables = TAB_TABLES;
@@ -3840,19 +4920,48 @@ export default function CrmAdmin() {
   async function handleBrandingSave() {
     setSavingBranding(true);
 
-    const payload: BrandingUpdate = {
-      brandName: brandingForm.brandName.trim() || DEFAULT_BRANDING.brandName,
-      brandKeyword: brandingForm.brandKeyword.trim() || DEFAULT_BRANDING.brandKeyword,
-      navbarLogoUrl: brandingForm.navbarLogoUrl.trim() || DEFAULT_BRANDING.navbarLogoUrl,
-      footerLogoUrl: (syncBrandLogos ? brandingForm.navbarLogoUrl : brandingForm.footerLogoUrl).trim() || DEFAULT_BRANDING.footerLogoUrl,
-    };
-
     try {
+      const depositorProtectionUrl = brandingForm.depositorProtectionUrl.trim()
+        || DEFAULT_BRANDING.depositorProtectionUrl;
+      const parsedDepositorProtectionUrl = new URL(depositorProtectionUrl);
+
+      if (!['http:', 'https:'].includes(parsedDepositorProtectionUrl.protocol)) {
+        throw new Error('Depositor-protection URL must start with http:// or https://.');
+      }
+
+      const legalContactEmail = brandingForm.legalContactEmail.trim().toLowerCase();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(legalContactEmail)) {
+        throw new Error('Enter a valid legal contact email address.');
+      }
+
+      const payload: BrandingUpdate = {
+        brandName: brandingForm.brandName.trim() || DEFAULT_BRANDING.brandName,
+        brandKeyword: brandingForm.brandKeyword.trim() || DEFAULT_BRANDING.brandKeyword,
+        navbarLogoUrl: brandingForm.navbarLogoUrl.trim() || DEFAULT_BRANDING.navbarLogoUrl,
+        footerLogoUrl: (syncBrandLogos ? brandingForm.navbarLogoUrl : brandingForm.footerLogoUrl).trim() || DEFAULT_BRANDING.footerLogoUrl,
+        faviconIcoUrl: brandingForm.faviconIcoUrl.trim() || DEFAULT_BRANDING.faviconIcoUrl,
+        favicon16Url: brandingForm.favicon16Url.trim() || DEFAULT_BRANDING.favicon16Url,
+        favicon32Url: brandingForm.favicon32Url.trim() || DEFAULT_BRANDING.favicon32Url,
+        appleTouchIconUrl: brandingForm.appleTouchIconUrl.trim() || DEFAULT_BRANDING.appleTouchIconUrl,
+        favicon192Url: brandingForm.favicon192Url.trim() || DEFAULT_BRANDING.favicon192Url,
+        favicon512Url: brandingForm.favicon512Url.trim() || DEFAULT_BRANDING.favicon512Url,
+        mfiId: brandingForm.mfiId.trim() || DEFAULT_BRANDING.mfiId,
+        countryCode: brandingForm.countryCode.trim().toUpperCase() || DEFAULT_BRANDING.countryCode,
+        mfiCode: brandingForm.mfiCode.trim() || DEFAULT_BRANDING.mfiCode,
+        institutionalTitle: brandingForm.institutionalTitle.trim(),
+        institutionalDescription: brandingForm.institutionalDescription.trim(),
+        mfiIdNote: brandingForm.mfiIdNote.trim(),
+        depositorProtectionTitle: brandingForm.depositorProtectionTitle.trim(),
+        depositorProtectionDescription: brandingForm.depositorProtectionDescription.trim(),
+        depositorProtectionUrl,
+        legalContactEmail,
+      };
+
       const result = await saveBranding(payload);
       setNotice({
         kind: result.persisted === 'remote' ? 'success' : 'error',
         message: result.persisted === 'remote'
-          ? 'Branding updated across the site.'
+          ? 'Branding, favicons, institutional settings, and legal contact email updated across the site.'
           : `Branding was saved only in this browser. Supabase rejected the update: ${result.error || 'unknown error'}`,
       });
     } catch (error) {
@@ -3884,11 +4993,31 @@ export default function CrmAdmin() {
           [slot === 'navbar' ? 'navbarLogoUrl' : 'footerLogoUrl']: publicUrl,
         };
       });
-      setNotice({ kind: 'success', message: 'Logo is ready. Press Save branding to publish it.' });
+      setNotice({ kind: 'success', message: 'Logo is ready. Press Save site settings to publish it.' });
     } catch (error) {
       setNotice({
         kind: 'error',
         message: error instanceof Error ? error.message : 'Could not upload logo.',
+      });
+    } finally {
+      setUploadingBrandLogo(null);
+    }
+  }
+
+  async function handleBrandingFaviconUpload(file: File) {
+    setUploadingBrandLogo('favicon');
+
+    try {
+      const generatedFavicons = await uploadFavicon(file);
+      setBrandingForm((current) => ({ ...current, ...generatedFavicons }));
+      setNotice({
+        kind: 'success',
+        message: 'All favicon sizes were generated. Press Save site settings to publish them.',
+      });
+    } catch (error) {
+      setNotice({
+        kind: 'error',
+        message: error instanceof Error ? error.message : 'Could not generate the favicon files.',
       });
     } finally {
       setUploadingBrandLogo(null);
@@ -3956,10 +5085,10 @@ export default function CrmAdmin() {
     ? 'available'
     : customerBalanceStatus;
   const balanceCreateStatusNote = balanceRows.length === 0
-    ? `The next balance you create will start as ${getBalanceStatusLabel(balanceCreateStatus).toLowerCase()}.`
+    ? `The status defaults to ${getBalanceStatusLabel(balanceCreateStatus).toLowerCase()}, and you can choose another status for this balance.`
     : customerBalanceStatus === 'mixed'
-    ? 'This customer currently has mixed statuses, so new balances default to available until you apply one customer-wide setting.'
-    : `New balances inherit the current customer-wide status: ${getBalanceStatusLabel(balanceCreateStatus)}.`;
+    ? 'This customer has mixed statuses, so new balances default to available; you can choose another status before creating one.'
+    : `The status defaults to ${getBalanceStatusLabel(balanceCreateStatus)}, and you can choose another status for this balance.`;
   const activityTransactionCreateSource: TransactionSourceTable = newActivitySource === 'crypto_transactions'
     ? 'crypto_transactions'
     : 'transactions';
@@ -4018,8 +5147,21 @@ export default function CrmAdmin() {
   }, [branding]);
 
   useEffect(() => {
-    updateCrmAdminViewState({ selectedUserId, activeTable, search });
-  }, [selectedUserId, activeTable, search]);
+    updateCrmAdminViewState({
+      selectedUserId,
+      activeTable,
+      search,
+      directoryRoleFilter,
+      directoryPage: safeDirectoryPage,
+      directoryPageSize,
+    });
+  }, [selectedUserId, activeTable, search, directoryRoleFilter, safeDirectoryPage, directoryPageSize]);
+
+  useEffect(() => {
+    if (directoryPage > directoryPageCount) {
+      setDirectoryPage(directoryPageCount);
+    }
+  }, [directoryPage, directoryPageCount]);
 
   useEffect(() => {
     const main = document.querySelector('main');
@@ -4052,6 +5194,7 @@ export default function CrmAdmin() {
   useEffect(() => {
     const scrollTop = initialViewState.scrollTop || 0;
     if (restoredScrollRef.current || scrollTop <= 0) return;
+    if (loadingProfiles || (selectedUserId && loadingTables)) return;
 
     const main = mainScrollRef.current ?? document.querySelector('main');
     if (!(main instanceof HTMLElement)) return;
@@ -4066,7 +5209,7 @@ export default function CrmAdmin() {
       restoreScroll();
       window.setTimeout(restoreScroll, 120);
     });
-  }, [activeConfig?.name, initialViewState.scrollTop, loadingProfiles, loadingTables, selectedProfile]);
+  }, [activeConfig?.name, initialViewState.scrollTop, loadingProfiles, loadingTables, selectedProfile, selectedUserId]);
 
   useEffect(() => {
     if (!activeConfig) return;
@@ -4090,7 +5233,13 @@ export default function CrmAdmin() {
   }, [activeConfig?.name, selectedUserId]);
 
   useEffect(() => {
-    resetNewBalanceDraft();
+    setNewBalanceDraft({
+      kind: 'fiat',
+      code: 'USD',
+      name: '',
+      balance: '0',
+      status: 'available',
+    });
   }, [selectedUserId, activeConfig?.name]);
 
   useEffect(() => {
@@ -4393,6 +5542,7 @@ export default function CrmAdmin() {
       code: 'USD',
       name: '',
       balance: '0',
+      status: balanceCreateStatus,
     });
   }
 
@@ -4491,8 +5641,16 @@ export default function CrmAdmin() {
         payload[sourceConfig.filterColumn] = payload[sourceConfig.filterColumn] ?? selectedUserId;
       }
 
+      if (isTransferSourceTable(sourceConfig.name)) {
+        enforceExternalTransferCreatePayload(sourceConfig.name, payload);
+      }
+
+      if (!normalizeActivityCreateDate(payload)) {
+        setNotice({ kind: 'error', message: 'Choose a valid activity date and time.' });
+        setSavingNewRecord(false);
+        return;
+      }
       delete payload.id;
-      delete payload.created_at;
       delete payload.updated_at;
 
       const { data, error } = await insertAdminRow(sourceConfig.name, payload);
@@ -4543,6 +5701,15 @@ export default function CrmAdmin() {
         payload[field.key.trim()] = parseDraftValue(field.value);
       });
 
+      if (newWalletSource === 'tax_wallet_addresses') {
+        payload.label = 'Tax Payment Wallet';
+        payload.symbol = '';
+        payload.network = '';
+        payload.payment_uri = '';
+      }
+
+      Object.assign(payload, normalizeWalletAdminPayload(payload));
+
       if (sourceConfig.scope === 'user' && sourceConfig.filterColumn && selectedUserId) {
         payload[sourceConfig.filterColumn] = payload[sourceConfig.filterColumn] ?? selectedUserId;
       }
@@ -4551,18 +5718,56 @@ export default function CrmAdmin() {
       delete payload.created_at;
       delete payload.updated_at;
 
-      const { data, error } = await insertAdminRow(sourceConfig.name, payload);
+      if (newWalletSource === 'crypto_wallets' && !String(payload.symbol || '').trim()) {
+        setNotice({ kind: 'error', message: 'Enter the cryptocurrency symbol for this wallet.' });
+        setSavingNewRecord(false);
+        return;
+      }
+
+      if (newWalletSource === 'crypto_wallets' && !String(payload.network || '').trim()) {
+        setNotice({ kind: 'error', message: 'Enter the exact blockchain network for this wallet.' });
+        setSavingNewRecord(false);
+        return;
+      }
+
+      const paymentRequest = getCryptoPaymentRequest({
+        wallet_address: String(payload.wallet_address || ''),
+        symbol: String(payload.symbol || ''),
+        network: String(payload.network || ''),
+        payment_uri: String(payload.payment_uri || ''),
+      });
+      if (!paymentRequest.valid) {
+        setNotice({ kind: 'error', message: paymentRequest.error || 'The wallet address is invalid.' });
+        setSavingNewRecord(false);
+        return;
+      }
+
+      const existingTaxWallet = newWalletSource === 'tax_wallet_addresses'
+        ? (tableData.tax_wallet_addresses || [])[0]
+        : null;
+      const saveResult = existingTaxWallet
+        ? await updateAdminRow(sourceConfig.name, String(existingTaxWallet.id), (() => {
+            const updatePayload = { ...payload };
+            delete updatePayload.user_id;
+            return updatePayload;
+          })())
+        : await insertAdminRow(sourceConfig.name, payload);
+      const { data, error } = saveResult;
 
       if (error) {
         setNotice({ kind: 'error', message: error.message });
       } else if (data) {
         setTableData((prev) => ({
           ...prev,
-          [sourceConfig.name]: [data as AdminRow, ...(prev[sourceConfig.name] || [])],
+          [sourceConfig.name]: existingTaxWallet
+            ? (prev[sourceConfig.name] || []).map((row) => row.id === existingTaxWallet.id ? data as AdminRow : row)
+            : [data as AdminRow, ...(prev[sourceConfig.name] || [])],
         }));
         setNotice({
           kind: 'success',
-          message: `${newWalletSource === 'crypto_wallets' ? 'Crypto' : 'Tax'} wallet created.`,
+          message: newWalletSource === 'crypto_wallets'
+            ? 'Crypto wallet created.'
+            : 'Tax payment wallet configured.',
         });
         setNewRecordFields(toDraftFields(sourceConfig, selectedUserId, data as AdminRow));
         setIsAddingRecord(false);
@@ -4602,8 +5807,14 @@ export default function CrmAdmin() {
         payload[sourceConfig.filterColumn] = payload[sourceConfig.filterColumn] ?? selectedUserId;
       }
 
+      enforceExternalTransferCreatePayload(newTransferSource, payload);
+
+      if (!normalizeActivityCreateDate(payload)) {
+        setNotice({ kind: 'error', message: 'Choose a valid transfer date and time.' });
+        setSavingNewRecord(false);
+        return;
+      }
       delete payload.id;
-      delete payload.created_at;
       delete payload.updated_at;
 
       const { data, error } = await insertAdminRow(sourceConfig.name, payload);
@@ -4657,8 +5868,12 @@ export default function CrmAdmin() {
         payload[sourceConfig.filterColumn] = payload[sourceConfig.filterColumn] ?? selectedUserId;
       }
 
+      if (!normalizeActivityCreateDate(payload)) {
+        setNotice({ kind: 'error', message: 'Choose a valid transaction date and time.' });
+        setSavingNewRecord(false);
+        return;
+      }
       delete payload.id;
-      delete payload.created_at;
       delete payload.updated_at;
 
       const { data, error } = await insertAdminRow(sourceConfig.name, payload);
@@ -4771,7 +5986,7 @@ export default function CrmAdmin() {
               name: newBalanceDraft.name.trim() || getDefaultFiatAssetName(trimmedCode),
               display_order: nextDisplayOrder,
               balance: numericBalance,
-              status: balanceCreateStatus,
+              status: normalizeBalanceStatus(newBalanceDraft.status),
             }
           : {
               user_id: selectedUserId,
@@ -4779,7 +5994,7 @@ export default function CrmAdmin() {
               name: newBalanceDraft.name.trim() || trimmedCode,
               display_order: nextDisplayOrder,
               balance: numericBalance,
-              status: balanceCreateStatus,
+              status: normalizeBalanceStatus(newBalanceDraft.status),
             };
 
       const insertPayload: Record<string, unknown> = { ...payload };
@@ -4812,7 +6027,7 @@ export default function CrmAdmin() {
         }));
         setNotice({
           kind: 'success',
-          message: `${newBalanceDraft.kind === 'fiat' ? 'Fiat' : 'Crypto'} balance created and enabled for live exchange.`,
+          message: `${newBalanceDraft.kind === 'fiat' ? 'Fiat' : 'Crypto'} balance created with ${getBalanceStatusLabel(newBalanceDraft.status).toLowerCase()} status.`,
         });
         resetNewBalanceDraft();
         setIsAddingRecord(false);
@@ -4866,8 +6081,329 @@ export default function CrmAdmin() {
     setSavingNewRecord(false);
   }
 
+  async function handleCreateUser(draft: NewUserDraft) {
+    if (!canCreateUsers || !user) {
+      setNotice({ kind: 'error', message: 'Your CRM role cannot create users.' });
+      return;
+    }
+
+    const allowedRoles: CrmRole[] = isViewerAdmin
+      ? ['customer', 'agent', 'superior_manager', 'admin']
+      : viewerRole === 'superior_manager'
+      ? ['customer', 'agent']
+      : ['customer'];
+
+    if (!allowedRoles.includes(draft.crm_role)) {
+      setNotice({ kind: 'error', message: `${getCrmRoleLabel(viewerRole)} cannot create that CRM role.` });
+      return;
+    }
+
+    const fullName = draft.full_name.trim();
+    const email = draft.email.trim().toLowerCase();
+    if (!fullName) {
+      setNotice({ kind: 'error', message: 'Full name is required.' });
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setNotice({ kind: 'error', message: 'Enter a valid email address.' });
+      return;
+    }
+    if (draft.password.length < 6) {
+      setNotice({ kind: 'error', message: 'Password must be at least 6 characters.' });
+      return;
+    }
+    if (draft.password !== draft.confirm_password) {
+      setNotice({ kind: 'error', message: 'The password confirmation does not match.' });
+      return;
+    }
+    const accountCreatedAt = accountDateInputToIso(draft.account_created_date);
+    if (!accountCreatedAt) {
+      setNotice({ kind: 'error', message: 'Choose a valid account creation date.' });
+      return;
+    }
+
+    setCreatingUser(true);
+    setCreateUserError('');
+    setNotice(null);
+
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      let currentSession = sessionData.session;
+      const tokenExpiresSoon =
+        !currentSession?.expires_at ||
+        currentSession.expires_at * 1000 <= Date.now() + 60_000;
+
+      if (!currentSession || tokenExpiresSoon) {
+        const { data: refreshedData, error: refreshError } = await supabase.auth.refreshSession();
+        if (refreshError) throw refreshError;
+        currentSession = refreshedData.session;
+      }
+
+      if (!currentSession?.access_token) {
+        throw new Error('Your CRM session is missing. Please sign in again and retry.');
+      }
+
+      const requestBody = {
+        action: 'create',
+        full_name: fullName,
+        email,
+        password: draft.password,
+        account_iban: draft.account_iban.trim().toUpperCase(),
+        kyc_status: draft.kyc_status,
+        crm_role: draft.crm_role,
+        assigned_manager_id:
+          viewerRole === 'agent'
+            ? viewerProfile?.assigned_manager_id || null
+            : viewerRole === 'superior_manager'
+            ? user.id
+            : draft.crm_role === 'customer' || draft.crm_role === 'agent'
+            ? draft.assigned_manager_id || null
+            : null,
+        assigned_agent_id:
+          viewerRole === 'agent'
+            ? user.id
+            : draft.crm_role === 'customer'
+            ? draft.assigned_agent_id || null
+            : null,
+        email_confirm: draft.email_confirm,
+        account_created_at: accountCreatedAt,
+        show_account_created_at: draft.show_account_created_at,
+      };
+      const runCreateRequest = (accessToken: string) =>
+        fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-user-management`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+            Authorization: `Bearer ${accessToken}`,
+          },
+          body: JSON.stringify(requestBody),
+        });
+
+      const runCompatibilityCreate = async (accessToken: string): Promise<CreateUserResponse> => {
+        if (!isViewerAdmin) {
+          throw new Error(
+            'Staff account creation requires the current admin-user-management function to be deployed.'
+          );
+        }
+
+        if (!draft.email_confirm) {
+          throw new Error(
+            'Creating an unconfirmed login requires the current admin-user-management function. Ask the Supabase project owner to deploy it, or enable “Mark email as confirmed” and retry.'
+          );
+        }
+
+        const registrationResponse = await fetch(
+          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/public-register`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+              Authorization: `Bearer ${accessToken}`,
+            },
+            body: JSON.stringify({
+              full_name: fullName,
+              email,
+              password: draft.password,
+            }),
+          }
+        );
+        const registrationText = await registrationResponse.text();
+        let registrationBody: { error?: string } = {};
+
+        if (registrationText) {
+          try {
+            registrationBody = JSON.parse(registrationText) as { error?: string };
+          } catch {
+            registrationBody = {};
+          }
+        }
+
+        if (!registrationResponse.ok) {
+          throw new Error(
+            registrationBody.error || registrationText || `Account creation failed with status ${registrationResponse.status}.`
+          );
+        }
+
+        let triggeredProfile: ProfileRecord | null = null;
+        let profileLookupError = '';
+
+        for (let attempt = 0; attempt < 8; attempt += 1) {
+          const { data, error } = await supabase
+            .from('profiles')
+            .select(PROFILE_RECORD_SELECT)
+            .eq('email', email)
+            .maybeSingle();
+
+          if (data) {
+            triggeredProfile = data as ProfileRecord;
+            break;
+          }
+
+          if (error) profileLookupError = error.message;
+          await waitForProfileTrigger();
+        }
+
+        if (!triggeredProfile) {
+          throw new Error(
+            `The login was created, but its CRM profile was not generated.${profileLookupError ? ` ${profileLookupError}` : ''}`
+          );
+        }
+
+        const profilePayload = {
+          full_name: fullName,
+          email,
+          account_iban: draft.account_iban.trim().toUpperCase(),
+          kyc_status: draft.kyc_status,
+          crm_role: draft.crm_role,
+          is_admin: draft.crm_role === 'admin',
+          assigned_manager_id:
+            draft.crm_role === 'customer' || draft.crm_role === 'agent'
+              ? draft.assigned_manager_id || null
+              : null,
+          assigned_agent_id: draft.crm_role === 'customer' ? draft.assigned_agent_id || null : null,
+          plain_password: draft.password,
+          created_at: accountCreatedAt,
+          show_account_created_at: draft.show_account_created_at,
+          updated_at: new Date().toISOString(),
+        };
+        const { data: configuredProfile, error: configureError } = await supabase
+          .from('profiles')
+          .update(profilePayload)
+          .eq('id', triggeredProfile.id)
+          .select(PROFILE_RECORD_SELECT)
+          .single();
+
+        if (configureError || !configuredProfile) {
+          let rollbackWarning = '';
+
+          try {
+            const rollbackResponse = await fetch(
+              `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-user-management`,
+              {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+                  Authorization: `Bearer ${accessToken}`,
+                },
+                body: JSON.stringify({
+                  action: 'delete',
+                  user_id: triggeredProfile.id,
+                  confirm_email: email,
+                }),
+              }
+            );
+
+            if (!rollbackResponse.ok) {
+              const rollbackText = await rollbackResponse.text();
+              rollbackWarning = ` Automatic rollback failed${rollbackText ? `: ${rollbackText}` : '.'}`;
+            }
+          } catch (rollbackError) {
+            rollbackWarning = ` Automatic rollback failed: ${rollbackError instanceof Error ? rollbackError.message : 'unknown error'}`;
+          }
+
+          throw new Error(
+            `The login was created, but CRM profile setup failed: ${configureError?.message || 'No configured profile was returned'}.${rollbackWarning}`
+          );
+        }
+
+        return {
+          profile: configuredProfile as ProfileRecord,
+          user: {
+            id: triggeredProfile.id,
+            email,
+            email_confirmed: true,
+          },
+        };
+      };
+
+      let activeAccessToken = currentSession.access_token;
+      let response = await runCreateRequest(activeAccessToken);
+
+      if (response.status === 401) {
+        const { data: retriedSession, error: retryError } = await supabase.auth.refreshSession();
+        if (retryError || !retriedSession.session?.access_token) {
+          throw new Error(retryError?.message || 'Your administrator session expired. Please sign in again.');
+        }
+        activeAccessToken = retriedSession.session.access_token;
+        response = await runCreateRequest(activeAccessToken);
+      }
+
+      const rawResponse = await response.text();
+      let responseBody: CreateUserResponse = {};
+      if (rawResponse) {
+        try {
+          responseBody = JSON.parse(rawResponse) as CreateUserResponse;
+        } catch {
+          responseBody = {};
+        }
+      }
+
+      if (!response.ok) {
+        const primaryError = responseBody.error || rawResponse || `User creation failed with status ${response.status}`;
+        const staleCreateFunction = primaryError.trim().toLowerCase() === 'user_id is required';
+
+        if (staleCreateFunction) {
+          responseBody = await runCompatibilityCreate(activeAccessToken);
+        } else {
+          const rollbackWarning = responseBody.rollback_warning
+            ? ` Auth rollback warning: ${responseBody.rollback_warning}`
+            : '';
+          throw new Error(`${primaryError}${rollbackWarning}`);
+        }
+      }
+
+      if (!responseBody.profile?.id) {
+        throw new Error('The user was created, but the CRM function did not return the new profile. Refresh the directory to verify it.');
+      }
+
+      const nextProfile = {
+        ...responseBody.profile,
+        crm_role: normalizeCrmRole(
+          responseBody.profile.crm_role,
+          responseBody.profile.is_admin ? 'admin' : 'customer'
+        ),
+        assigned_manager_id: responseBody.profile.assigned_manager_id || null,
+        assigned_agent_id: responseBody.profile.assigned_agent_id || null,
+      } as ProfileRecord;
+
+      setProfiles((current) => [nextProfile, ...current.filter((profile) => profile.id !== nextProfile.id)]);
+      setCreateUserDialogOpen(false);
+      setCreateUserError('');
+      setSearch('');
+      setTableData({});
+      setTableErrors({});
+      setEditingRecordId(null);
+      setIsAddingRecord(false);
+      setSelectedUserId(nextProfile.id);
+      setNotice({
+        kind: 'success',
+        message: draft.email_confirm
+          ? `${nextProfile.full_name || nextProfile.email} was created successfully and can now sign in.`
+          : `${nextProfile.full_name || nextProfile.email} was created successfully and must confirm the email before signing in.`,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Could not create the user.';
+      setCreateUserError(message);
+      setNotice({
+        kind: 'error',
+        message,
+      });
+    } finally {
+      setCreatingUser(false);
+    }
+  }
+
   async function handleProfileSave(updates: ProfileSavePayload) {
     if (!selectedProfile) return;
+
+    const accountCreatedAt = accountDateInputToIso(updates.account_created_date);
+    if (!accountCreatedAt) {
+      setNotice({ kind: 'error', message: 'Choose a valid profile creation date.' });
+      return;
+    }
 
     setSavingProfile(true);
     setNotice(null);
@@ -4954,7 +6490,9 @@ export default function CrmAdmin() {
       }
     }
 
-    const payload = {
+    const accountDateChanged = updates.account_created_date !== accountDateIsoToInputValue(selectedProfile.created_at);
+    const accountDateVisibilityChanged = updates.show_account_created_at !== (selectedProfile.show_account_created_at !== false);
+    const payload: Record<string, unknown> = {
       full_name: updates.full_name,
       email: updates.email,
       account_iban: updates.account_iban.trim(),
@@ -4965,6 +6503,8 @@ export default function CrmAdmin() {
       assigned_agent_id: updates.assigned_agent_id,
       plain_password: passwordChanged ? nextPassword : selectedProfile.plain_password,
       updated_at: new Date().toISOString(),
+      ...(accountDateChanged ? { created_at: accountCreatedAt } : {}),
+      ...(accountDateVisibilityChanged ? { show_account_created_at: updates.show_account_created_at } : {}),
     };
 
     const { data, error } = await supabase
@@ -5114,6 +6654,15 @@ export default function CrmAdmin() {
   }
 
   async function handleRecordSave(tableName: string, originalRow: AdminRow, editedRow: AdminRow) {
+    const hasInvalidActivityDate = Object.entries(editedRow).some(
+      ([key, value]) => isActivityDateField(editedRow, key) && normalizeDateForSave(value, null) === null
+    );
+
+    if (hasInvalidActivityDate) {
+      setNotice({ kind: 'error', message: 'Choose a valid date and time before saving.' });
+      return;
+    }
+
     setSavingRecordId(originalRow.id);
     setNotice(null);
 
@@ -5181,15 +6730,41 @@ export default function CrmAdmin() {
     setNotice(null);
 
     if (tableErrors[TAX_SUMMARY_CARDS_TABLE_NAME] === null) {
-      const { data, error } = await supabase.rpc('set_tax_summary_card', {
+      const normalizedCurrency = normalizeTaxCurrency(currency);
+      let { data, error } = await supabase.rpc('set_tax_summary_card', {
         target_user_id: selectedUserId,
         target_status: status,
         target_amount: normalizedAmount,
-        target_currency: normalizeTaxCurrency(currency),
+        target_currency: normalizedCurrency,
       });
 
+      // Older deployments restricted this RPC to top-level admins even though
+      // tax_summary_cards RLS already permits scoped CRM staff. Keep agents and
+      // managers functional while the corrected function propagates everywhere.
+      if (error && shouldRetryTaxSummaryWithoutRpc(error)) {
+        const fallbackResult = await supabase
+          .from(TAX_SUMMARY_CARDS_TABLE_NAME)
+          .upsert(
+            buildTaxSummaryCardUpsertRows(
+              tableData[TAX_SUMMARY_CARDS_TABLE_NAME] || [],
+              selectedUserId,
+              status,
+              normalizedAmount,
+              normalizedCurrency
+            ),
+            { onConflict: 'user_id,status' }
+          )
+          .select();
+
+        data = fallbackResult.data;
+        error = fallbackResult.error;
+      }
+
       if (error) {
-        setNotice({ kind: 'error', message: error.message });
+        setNotice({
+          kind: 'error',
+          message: `Could not update the customer's tax summary: ${error.message}`,
+        });
       } else {
         setTableData((prev) => ({
           ...prev,
@@ -5288,7 +6863,11 @@ export default function CrmAdmin() {
     });
   }
 
-  async function handleBalanceSave(row: BalanceRow, nextBalance: string) {
+  async function handleBalanceSave(
+    row: BalanceRow,
+    nextBalance: string,
+    nextStatus: BalanceAvailabilityStatus,
+  ) {
     const sourceRows = tableData[row.source_table] || [];
     const originalRow = sourceRows.find((entry) => String(entry.id) === row.source_id);
     const normalizedBalance = shouldNormalizeFiatBalanceInput(row)
@@ -5315,6 +6894,7 @@ export default function CrmAdmin() {
     await handleRecordSave(row.source_table, originalRow, {
       ...originalRow,
       balance: numericBalance,
+      status: normalizeBalanceStatus(nextStatus),
     });
   }
 
@@ -5473,7 +7053,7 @@ export default function CrmAdmin() {
     }
 
     await handleRecordSave(row.__source_table, originalRow, {
-      ...sanitizePayload(editedRow),
+      ...editedRow,
       id: originalRow.id,
     });
   }
@@ -5493,7 +7073,7 @@ export default function CrmAdmin() {
     }
 
     await handleRecordSave(row.__source_table, originalRow, normalizeTransferSavePayload(row.__source_table, {
-      ...sanitizePayload(editedRow),
+      ...editedRow,
       id: originalRow.id,
     }));
   }
@@ -5554,8 +7134,26 @@ export default function CrmAdmin() {
       return;
     }
 
+    const sanitized = normalizeWalletAdminPayload(sanitizePayload(editedRow));
+    sanitized.payment_uri = '';
+    if (row.__source_table === 'tax_wallet_addresses') {
+      sanitized.label = 'Tax Payment Wallet';
+      sanitized.symbol = '';
+      sanitized.network = '';
+    }
+    const paymentRequest = getCryptoPaymentRequest({
+      wallet_address: String(sanitized.wallet_address || ''),
+      symbol: String(sanitized.symbol || ''),
+      network: String(sanitized.network || ''),
+      payment_uri: String(sanitized.payment_uri || ''),
+    });
+    if (!paymentRequest.valid) {
+      setNotice({ kind: 'error', message: paymentRequest.error || 'The wallet address is invalid.' });
+      return;
+    }
+
     await handleRecordSave(row.__source_table, originalRow, {
-      ...sanitizePayload(editedRow),
+      ...sanitized,
       id: originalRow.id,
     });
   }
@@ -5636,7 +7234,7 @@ export default function CrmAdmin() {
         onEdit={() => handleStartEditRecord(row.id)}
         onMoveUp={() => handleBalanceMove(row, 'up')}
         onMoveDown={() => handleBalanceMove(row, 'down')}
-        onSave={(nextBalance) => handleBalanceSave(row, nextBalance)}
+        onSave={(nextBalance, nextStatus) => handleBalanceSave(row, nextBalance, nextStatus)}
         onDelete={() => handleBalanceDelete(row)}
         onCancel={() => setEditingRecordId(null)}
       />
@@ -5749,6 +7347,7 @@ export default function CrmAdmin() {
       onFieldChange={handleBrandingFieldChange}
       onSyncLogosChange={handleSyncBrandLogosChange}
       onUploadLogo={handleBrandingLogoUpload}
+      onUploadFavicon={handleBrandingFaviconUpload}
       onSave={handleBrandingSave}
       onReset={handleBrandingReset}
       onRefresh={refreshBranding}
@@ -5767,24 +7366,74 @@ export default function CrmAdmin() {
             </p>
           </div>
 
-          <button
-            type="button"
-            onClick={() => void loadProfiles()}
-            className="inline-flex items-center justify-center gap-2 rounded-full border border-[#006446]/12 px-4 py-2 text-sm font-medium text-[#006446] transition-colors hover:bg-[#006446]/[0.05]"
-          >
-            <RefreshCw className={`h-4 w-4 ${loadingProfiles ? 'animate-spin' : ''}`} />
-            Refresh users
-          </button>
+          <div className="flex flex-col gap-3 sm:flex-row">
+            {canCreateUsers && (
+              <button
+                type="button"
+                onClick={() => {
+                  setNotice(null);
+                  setCreateUserError('');
+                  setCreateUserDialogOpen(true);
+                }}
+                className="inline-flex items-center justify-center gap-2 rounded-full bg-[#006446] px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#004d36]"
+              >
+                <Plus className="h-4 w-4" />
+                Create new user
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => void loadProfiles()}
+              className="inline-flex items-center justify-center gap-2 rounded-full border border-[#006446]/12 px-4 py-2 text-sm font-medium text-[#006446] transition-colors hover:bg-[#006446]/[0.05]"
+            >
+              <RefreshCw className={`h-4 w-4 ${loadingProfiles ? 'animate-spin' : ''}`} />
+              Refresh users
+            </button>
+          </div>
         </div>
 
         <div className="relative mt-5 max-w-2xl">
           <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[#006446]" />
           <input
             value={search}
-            onChange={(event) => setSearch(event.target.value)}
+            onChange={(event) => {
+              setSearch(event.target.value);
+              setDirectoryPage(1);
+            }}
             placeholder="Search by name, email, or ID"
             className="w-full rounded-2xl border border-[#006446]/14 bg-white py-3 pl-11 pr-4 text-sm text-slate-900 outline-none transition-all focus:border-[#006446]/35 focus:ring-2 focus:ring-[#006446]/15"
           />
+        </div>
+
+        <div className="mt-5">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#006446]">Filter users</p>
+          <div className="mt-3 flex flex-wrap gap-2" role="group" aria-label="Filter directory by CRM role">
+            {DIRECTORY_ROLE_FILTERS.map((filter) => {
+              const active = directoryRoleFilter === filter.value;
+
+              return (
+                <button
+                  key={filter.value}
+                  type="button"
+                  onClick={() => {
+                    setDirectoryRoleFilter(filter.value);
+                    setDirectoryPage(1);
+                  }}
+                  aria-pressed={active}
+                  className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold transition-colors ${
+                    active
+                      ? 'border-[#006446] bg-[#006446] text-white'
+                      : 'border-[#006446]/14 bg-white text-slate-700 hover:bg-[#006446]/[0.05] hover:text-[#006446]'
+                  }`}
+                >
+                  {filter.label}
+                  <span className={`rounded-full px-2 py-0.5 text-[10px] ${active ? 'bg-white/18 text-white' : 'bg-slate-100 text-slate-500'}`}>
+                    {directoryRoleCounts[filter.value]}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
 
@@ -5795,12 +7444,12 @@ export default function CrmAdmin() {
           </div>
         ) : filteredProfiles.length === 0 ? (
           <div className="rounded-[28px] border border-dashed border-[#006446]/16 bg-white px-6 py-20 text-center">
-            <p className="text-lg font-semibold text-slate-900">No users matched this search</p>
-            <p className="mt-2 text-sm text-slate-500">Try a different name, email, or ID to find the customer you want to edit.</p>
+            <p className="text-lg font-semibold text-slate-900">No users match these filters</p>
+            <p className="mt-2 text-sm text-slate-500">Try another role or change the name, email, or ID search.</p>
           </div>
         ) : (
           <div className="space-y-4">
-            {filteredProfiles.map((profile) => {
+            {paginatedProfiles.map((profile) => {
               const copiedEmail = copiedCredentialKey === `${profile.id}:email`;
               const copiedPassword = copiedCredentialKey === `${profile.id}:password`;
               const managerProfile = profile.assigned_manager_id ? profileMap.get(profile.assigned_manager_id) : null;
@@ -5887,6 +7536,65 @@ export default function CrmAdmin() {
                 </article>
               );
             })}
+
+            <div className="flex flex-col gap-4 rounded-[24px] border border-[#006446]/12 bg-white px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-sm font-semibold text-slate-800">
+                  Showing {firstVisibleDirectoryUser}–{lastVisibleDirectoryUser} of {filteredProfiles.length} users
+                </p>
+                <p className="mt-1 text-xs text-slate-500">Only the users on this page are rendered.</p>
+              </div>
+
+              <div className="flex flex-col gap-3 sm:items-end">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="mr-1 text-xs font-medium text-slate-500">Users per page</span>
+                  {DIRECTORY_PAGE_SIZES.map((pageSize) => (
+                    <button
+                      key={pageSize}
+                      type="button"
+                      onClick={() => {
+                        setDirectoryPageSize(pageSize);
+                        setDirectoryPage(1);
+                      }}
+                      aria-pressed={directoryPageSize === pageSize}
+                      className={`h-9 min-w-9 rounded-full border px-3 text-xs font-semibold transition-colors ${
+                        directoryPageSize === pageSize
+                          ? 'border-[#006446] bg-[#006446] text-white'
+                          : 'border-slate-200 bg-white text-slate-600 hover:border-[#006446]/25 hover:text-[#006446]'
+                      }`}
+                    >
+                      {pageSize}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setDirectoryPage((current) => Math.max(1, current - 1))}
+                    disabled={safeDirectoryPage <= 1}
+                    aria-label="Previous directory page"
+                    className="inline-flex h-10 items-center justify-center gap-1 rounded-full border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition-colors hover:border-[#006446]/25 hover:text-[#006446] disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                    Previous
+                  </button>
+                  <span className="min-w-[96px] text-center text-sm font-semibold text-slate-700">
+                    Page {safeDirectoryPage} of {directoryPageCount}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setDirectoryPage((current) => Math.min(directoryPageCount, current + 1))}
+                    disabled={safeDirectoryPage >= directoryPageCount}
+                    aria-label="Next directory page"
+                    className="inline-flex h-10 items-center justify-center gap-1 rounded-full border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition-colors hover:border-[#006446]/25 hover:text-[#006446] disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    Next
+                    <ChevronRight className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
         )}
       </div>
@@ -5924,6 +7632,21 @@ export default function CrmAdmin() {
           <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
           <span>{notice.message}</span>
         </div>
+      )}
+
+      {createUserDialogOpen && canCreateUsers && user && (
+        <CreateUserDialog
+          profiles={profiles}
+          viewerId={user.id}
+          viewerRole={viewerRole}
+          creating={creatingUser}
+          error={createUserError}
+          onCancel={() => {
+            setCreateUserError('');
+            setCreateUserDialogOpen(false);
+          }}
+          onCreate={handleCreateUser}
+        />
       )}
 
       {deleteUserDialogOpen && selectedProfile && (
@@ -6633,6 +8356,7 @@ export default function CrmAdmin() {
         </section>
       ) : (
         <>
+          {isViewerAdmin && <IpWhitelistCard />}
           {isViewerAdmin && brandingPanel}
           {customerDirectory}
         </>

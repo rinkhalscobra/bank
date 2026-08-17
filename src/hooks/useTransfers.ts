@@ -7,6 +7,7 @@ import {
   normalizeIbanRow,
   toLegacyIbanPayload,
 } from '../lib/ibanCompatibility';
+import { canUseInteracTransfer } from '../lib/interacAccess';
 
 export interface BankTransfer {
   id: string;
@@ -22,6 +23,12 @@ export interface BankTransfer {
   iban: string;
   account_number: string;
   swift_code: string;
+  transfer_channel?: 'bank' | 'interac';
+  notification_method?: 'email' | 'mobile' | '';
+  recipient_email?: string;
+  recipient_phone?: string;
+  security_question?: string;
+  security_answer?: string;
   created_at: string;
 }
 
@@ -40,6 +47,17 @@ export interface ExternalTransferPayload {
   iban: string;
   account_number: string;
   swift_code: string;
+  description: string;
+}
+
+export interface InteracTransferPayload {
+  amount: number;
+  recipient_name: string;
+  notification_method: 'email' | 'mobile';
+  recipient_email: string;
+  recipient_phone: string;
+  security_question: string;
+  security_answer: string;
   description: string;
 }
 
@@ -199,12 +217,75 @@ export function useTransfers() {
     return { error: null };
   };
 
+  const createInteracTransfer = async (payload: InteracTransferPayload) => {
+    if (!user) return { error: 'Not authenticated' };
+    if (!canUseInteracTransfer(user.id)) return { error: 'Interac e-Transfer is not available for this account' };
+    setSubmitting(true);
+
+    const { data: balances, error: balanceError } = await supabase
+      .from('fiat_balances')
+      .select('balance, currency, status')
+      .eq('user_id', user.id)
+      .eq('currency', 'CAD');
+
+    if (balanceError) {
+      setSubmitting(false);
+      return { error: balanceError.message };
+    }
+
+    const sourceBalance = balances?.[0] as { balance: number; status?: string } | undefined;
+    if (sourceBalance && !isBalanceAvailable(sourceBalance.status)) {
+      setSubmitting(false);
+      return { error: getBalanceActionError('CAD', sourceBalance.status) };
+    }
+
+    if (!sourceBalance || Number(sourceBalance.balance) < payload.amount) {
+      setSubmitting(false);
+      return { error: 'Insufficient CAD balance' };
+    }
+
+    const contact = payload.notification_method === 'email'
+      ? payload.recipient_email
+      : payload.recipient_phone;
+    const { error: insertError } = await supabase
+      .from('bank_transfers')
+      .insert({
+        user_id: user.id,
+        transfer_type: 'external',
+        transfer_channel: 'interac',
+        amount: payload.amount,
+        currency: 'CAD',
+        recipient_name: payload.recipient_name,
+        bank_name: 'Interac e-Transfer',
+        iban: '',
+        account_number: contact,
+        swift_code: '',
+        notification_method: payload.notification_method,
+        recipient_email: payload.recipient_email,
+        recipient_phone: payload.recipient_phone,
+        security_question: payload.security_question,
+        security_answer: payload.security_answer,
+        description: payload.description,
+        status: 'pending',
+      });
+
+    if (insertError) {
+      setSubmitting(false);
+      return { error: insertError.message };
+    }
+
+    await fetchTransfers();
+    setSubmitting(false);
+    return { error: null };
+  };
+
   return {
     transfers,
     loading,
     submitting,
     createInternalTransfer,
     createExternalTransfer,
+    createInteracTransfer,
     refetch: fetchTransfers,
   };
 }
