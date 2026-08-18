@@ -1265,6 +1265,41 @@ function normalizeTransferSavePayload(sourceTable: TransferSourceTable, row: Adm
   return payload;
 }
 
+function normalizeBankingTransactionCreatePayload(payload: Record<string, unknown>) {
+  const normalizedPayload = payload;
+
+  if (!String(normalizedPayload.details || '').trim() && normalizedPayload.description !== undefined) {
+    normalizedPayload.details = normalizedPayload.description;
+  }
+
+  if (!String(normalizedPayload.poi || '').trim()) {
+    normalizedPayload.poi = normalizedPayload.reference_number ?? normalizedPayload.reference ?? '';
+  }
+
+  if (!String(normalizedPayload.comment || '').trim() && normalizedPayload.notes !== undefined) {
+    normalizedPayload.comment = normalizedPayload.notes;
+  }
+
+  normalizedPayload.type = String(normalizedPayload.type || 'debit').trim() || 'debit';
+  normalizedPayload.details = String(normalizedPayload.details || '').trim();
+  normalizedPayload.poi = String(normalizedPayload.poi || '').trim();
+  normalizedPayload.status = String(normalizedPayload.status || 'completed').trim() || 'completed';
+  normalizedPayload.comment = String(normalizedPayload.comment || '').trim();
+
+  // These columns belonged to the old banking-transactions schema and must
+  // never be sent to the current PostgREST endpoint.
+  delete normalizedPayload.account_id;
+  delete normalizedPayload.amount;
+  delete normalizedPayload.balance_after;
+  delete normalizedPayload.category;
+  delete normalizedPayload.description;
+  delete normalizedPayload.reference;
+  delete normalizedPayload.reference_number;
+  delete normalizedPayload.notes;
+
+  return normalizedPayload;
+}
+
 function statusClasses(kind: 'success' | 'error') {
   return kind === 'success'
     ? 'border-[#006446]/20 bg-[#006446]/[0.06] text-[#006446]'
@@ -1278,11 +1313,10 @@ function buildCreateTemplate(table: TableConfig, userId: string, sampleRow?: Adm
     ? {
         user_id: userId,
         type: 'debit',
-        amount: '',
-        description: '',
-        reference: '',
-        notes: '',
+        details: '',
+        poi: '',
         status: 'completed',
+        comment: '',
       }
     : table.name === 'crypto_transactions'
     ? {
@@ -6139,6 +6173,10 @@ export default function CrmAdmin() {
         payload[sourceConfig.filterColumn] = payload[sourceConfig.filterColumn] ?? selectedUserId;
       }
 
+      if (sourceConfig.name === 'transactions') {
+        normalizeBankingTransactionCreatePayload(payload);
+      }
+
       if (isTransferSourceTable(sourceConfig.name)) {
         enforceExternalTransferCreatePayload(sourceConfig.name, payload);
       }
@@ -6364,6 +6402,10 @@ export default function CrmAdmin() {
 
       if (sourceConfig.scope === 'user' && sourceConfig.filterColumn && selectedUserId) {
         payload[sourceConfig.filterColumn] = payload[sourceConfig.filterColumn] ?? selectedUserId;
+      }
+
+      if (sourceConfig.name === 'transactions') {
+        normalizeBankingTransactionCreatePayload(payload);
       }
 
       if (!normalizeActivityCreateDate(payload)) {
