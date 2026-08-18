@@ -5644,7 +5644,7 @@ export default function CrmAdmin() {
     ? selectedInteracAccessRow.enabled === true
     : tableErrors[INTERAC_ACCESS_SETTINGS_TABLE_NAME]
       ? selectedUserId === LEGACY_INTERAC_CUSTOMER_ID
-      : true;
+      : false;
   const isActivityView = isActivityTable(activeConfig?.name);
   const isTransactionsView = isTransactionsTable(activeConfig?.name);
   const isTransfersView = isTransfersTable(activeConfig?.name);

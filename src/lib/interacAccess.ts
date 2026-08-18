@@ -22,5 +22,5 @@ export async function fetchInteracAccess(userId: string | null | undefined) {
     return userId === LEGACY_INTERAC_CUSTOMER_ID;
   }
 
-  return !error && data?.enabled !== false;
+  return !error && data?.enabled === true;
 }

@@ -2,13 +2,14 @@
   # Per-user Interac e-Transfer access
 
   Replaces the original single-customer UUID restriction with a CRM-managed
-  access setting. Interac is enabled for existing and future customers by
-  default, while CRM staff can disable or re-enable it for any individual.
+  access setting. Interac is disabled for existing and future customers by
+  default, while CRM staff can enable or disable it for any individual.
+  Lariviere Jocelyne keeps the access granted by the original implementation.
 */
 
 CREATE TABLE IF NOT EXISTS public.interac_access_settings (
   user_id uuid PRIMARY KEY REFERENCES public.profiles(id) ON DELETE CASCADE,
-  enabled boolean NOT NULL DEFAULT true,
+  enabled boolean NOT NULL DEFAULT false,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
@@ -73,14 +74,14 @@ AS $$
     SELECT enabled
     FROM public.interac_access_settings
     WHERE user_id = target_user_id
-  ), true);
+  ), false);
 $$;
 
 REVOKE ALL ON FUNCTION public.user_has_interac_access(uuid) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.user_has_interac_access(uuid) TO authenticated;
 
 INSERT INTO public.interac_access_settings (user_id, enabled)
-SELECT id, true
+SELECT id, id = 'ba326e30-bd5d-4472-a5dc-18cf152bc1ae'::uuid
 FROM public.profiles
 ON CONFLICT (user_id) DO NOTHING;
 
