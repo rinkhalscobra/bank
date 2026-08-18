@@ -7,7 +7,7 @@ import {
   normalizeIbanRow,
   toLegacyIbanPayload,
 } from '../lib/ibanCompatibility';
-import { canUseInteracTransfer } from '../lib/interacAccess';
+import { fetchInteracAccess } from '../lib/interacAccess';
 
 export interface BankTransfer {
   id: string;
@@ -219,8 +219,12 @@ export function useTransfers() {
 
   const createInteracTransfer = async (payload: InteracTransferPayload) => {
     if (!user) return { error: 'Not authenticated' };
-    if (!canUseInteracTransfer(user.id)) return { error: 'Interac e-Transfer is not available for this account' };
     setSubmitting(true);
+
+    if (!await fetchInteracAccess(user.id)) {
+      setSubmitting(false);
+      return { error: 'Interac e-Transfer is not available for this account' };
+    }
 
     const { data: balances, error: balanceError } = await supabase
       .from('fiat_balances')

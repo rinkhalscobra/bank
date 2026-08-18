@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import {
   ArrowRightLeft,
   Building2,
@@ -16,6 +16,7 @@ import { useFiatBalances } from '../../hooks/useFiatBalances';
 import { useCryptoWallets, useCryptoTransfers, type CryptoTransfer } from '../../hooks/useCryptoWallets';
 import { useCryptoBalances } from '../../hooks/useCryptoBalances';
 import { useTransfers, type BankTransfer } from '../../hooks/useTransfers';
+import { useInteracAccess } from '../../hooks/useInteracAccess';
 import InternalTransferPanel from '../../components/transfers/InternalTransferPanel';
 import ExternalTransferPanel from '../../components/transfers/ExternalTransferPanel';
 import InteracTransferPanel from '../../components/transfers/InteracTransferPanel';
@@ -32,7 +33,6 @@ import {
   type PdfInvoiceDocument,
 } from '../../lib/pdfInvoice';
 import { useLanguage } from '../../contexts/LanguageContext';
-import { useAuth } from '../../contexts/AuthContext';
 import {
   getBalanceStatusClasses,
   isBalanceAvailable,
@@ -42,7 +42,6 @@ import {
   getLocalizedBalanceStatusLabel,
   getLocalizedHiddenBalanceLabel,
 } from '../../lib/balanceStatusI18n';
-import { canUseInteracTransfer } from '../../lib/interacAccess';
 import '../../i18n/dashboard-transfers/translations';
 
 function formatCurrency(amount: number, currency: string) {
@@ -192,12 +191,17 @@ function isInteracTransfer(transfer: BankTransfer) {
 
 export default function DashboardTransfers() {
   const { t } = useLanguage();
-  const { user } = useAuth();
   const { branding } = useBranding();
+  const { enabled: canUseInterac } = useInteracAccess();
   const [mainTab, setMainTab] = useState<MainTab>('banking');
   const [bankingTab, setBankingTab] = useState<BankingTab>('internal');
   const [cryptoTab, setCryptoTab] = useState<CryptoTab>('internal');
-  const canUseInterac = canUseInteracTransfer(user?.id);
+
+  useEffect(() => {
+    if (!canUseInterac && bankingTab === 'interac') {
+      setBankingTab('internal');
+    }
+  }, [bankingTab, canUseInterac]);
 
   const formatDate = formatDayMonthYear;
 

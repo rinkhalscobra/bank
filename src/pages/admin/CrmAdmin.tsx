@@ -46,6 +46,7 @@ import {
 import { supabase } from '../../lib/supabase';
 import { fetchLiveMarketData } from '../../lib/exchangeRates';
 import { getCryptoPaymentRequest } from '../../lib/cryptoPayment';
+import { LEGACY_INTERAC_CUSTOMER_ID } from '../../lib/interacAccess';
 import {
   getBalanceStatusClasses,
   getBalanceStatusLabel,
@@ -337,6 +338,8 @@ const TRANSFERS_TABLE: TableConfig = {
   filterColumn: 'user_id',
 };
 const INTERAC_TRANSFERS_TABLE_NAME = 'interac_transfers';
+const INTERAC_ACCESS_SETTINGS_TABLE_NAME = 'interac_access_settings';
+const INTERAC_ACCESS_SAVE_ID = 'interac-access-setting';
 const INTERAC_TRANSFERS_TABLE: TableConfig = {
   name: INTERAC_TRANSFERS_TABLE_NAME,
   label: 'Interac e-Transfers',
@@ -379,6 +382,13 @@ const TAX_SUMMARY_CARDS_TABLE: TableConfig = {
   scope: 'user',
   filterColumn: 'user_id',
 };
+const INTERAC_ACCESS_SETTINGS_TABLE: TableConfig = {
+  name: INTERAC_ACCESS_SETTINGS_TABLE_NAME,
+  label: 'Interac Access Settings',
+  icon: Send,
+  scope: 'user',
+  filterColumn: 'user_id',
+};
 const TAX_BANK_PAYMENT_SETTINGS_TABLE: TableConfig = {
   name: TAX_BANK_PAYMENT_SETTINGS_TABLE_NAME,
   label: 'Tax Bank Payment Settings',
@@ -387,7 +397,12 @@ const TAX_BANK_PAYMENT_SETTINGS_TABLE: TableConfig = {
   filterColumn: 'user_id',
 };
 const ALL_TABLES = [...USER_TABLES, ...GLOBAL_TABLES];
-const DATA_FETCH_TABLES = [...ALL_TABLES, TAX_SUMMARY_CARDS_TABLE, TAX_BANK_PAYMENT_SETTINGS_TABLE];
+const DATA_FETCH_TABLES = [
+  ...ALL_TABLES,
+  TAX_SUMMARY_CARDS_TABLE,
+  TAX_BANK_PAYMENT_SETTINGS_TABLE,
+  INTERAC_ACCESS_SETTINGS_TABLE,
+];
 const TAB_TABLES = [
   ...USER_TABLES.flatMap((table) => {
     if (table.name === 'transactions') return [TRANSACTIONS_TABLE];
@@ -2031,6 +2046,70 @@ function DeleteUserDialog({
         </div>
       </div>
     </div>
+  );
+}
+
+function InteracAccessControlCard({
+  enabled,
+  saving,
+  loadError,
+  onToggle,
+}: {
+  enabled: boolean;
+  saving: boolean;
+  loadError: string | null;
+  onToggle: (enabled: boolean) => Promise<void>;
+}) {
+  return (
+    <section className={`overflow-hidden border bg-white shadow-[0_24px_60px_-48px_rgba(0,100,70,0.45)] ${enabled ? 'border-[#006446]/20' : 'border-slate-200'}`}>
+      <div className={`flex flex-col gap-5 px-6 py-5 lg:flex-row lg:items-center lg:justify-between ${enabled ? 'bg-gradient-to-r from-[#006446]/[0.09] via-white to-white' : 'bg-gradient-to-r from-slate-100 via-white to-white'}`}>
+        <div className="flex min-w-0 items-start gap-4">
+          <div className={`flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl ${enabled ? 'bg-[#006446] text-white' : 'bg-slate-200 text-slate-500'}`}>
+            <Send className="h-5 w-5" />
+          </div>
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[#006446]">Client feature access</p>
+              <span className={`rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] ${enabled ? 'border-[#006446]/18 bg-[#006446]/10 text-[#006446]' : 'border-slate-200 bg-slate-100 text-slate-500'}`}>
+                {enabled ? 'Enabled' : 'Disabled'}
+              </span>
+            </div>
+            <h2 className="mt-2 text-xl font-serif font-bold text-slate-950">Interac e-Transfer</h2>
+            <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-500">
+              {enabled
+                ? 'The Interac tab and transfer form are visible on this customer’s dashboard.'
+                : 'The Interac tab is hidden and this customer cannot submit Interac transfers.'}
+            </p>
+            <p className="mt-1 text-xs text-slate-400">Existing transfer history remains available when access is disabled.</p>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          role="switch"
+          aria-checked={enabled}
+          onClick={() => void onToggle(!enabled)}
+          disabled={saving || Boolean(loadError)}
+          className={`inline-flex min-h-[46px] min-w-[190px] items-center justify-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${enabled ? 'border border-red-200 bg-white text-red-600 hover:bg-red-50' : 'bg-[#006446] text-white hover:bg-[#004d36]'}`}
+        >
+          {saving ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : enabled ? (
+            <X className="h-4 w-4" />
+          ) : (
+            <Check className="h-4 w-4" />
+          )}
+          {saving ? 'Saving access...' : enabled ? 'Disable for customer' : 'Enable for customer'}
+        </button>
+      </div>
+
+      {loadError ? (
+        <div className="flex items-start gap-2 border-t border-amber-200 bg-amber-50 px-6 py-3 text-sm text-amber-800">
+          <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
+          <span>Interac access settings are unavailable until the database migration is applied. {loadError}</span>
+        </div>
+      ) : null}
+    </section>
   );
 }
 
@@ -5555,6 +5634,17 @@ export default function CrmAdmin() {
     ),
     [tableData]
   );
+  const selectedInteracAccessRow = useMemo(
+    () => (tableData[INTERAC_ACCESS_SETTINGS_TABLE_NAME] || []).find(
+      (row) => String(row.user_id || '') === selectedUserId
+    ),
+    [selectedUserId, tableData]
+  );
+  const selectedInteracEnabled = selectedInteracAccessRow
+    ? selectedInteracAccessRow.enabled === true
+    : tableErrors[INTERAC_ACCESS_SETTINGS_TABLE_NAME]
+      ? selectedUserId === LEGACY_INTERAC_CUSTOMER_ID
+      : true;
   const isActivityView = isActivityTable(activeConfig?.name);
   const isTransactionsView = isTransactionsTable(activeConfig?.name);
   const isTransfersView = isTransfersTable(activeConfig?.name);
@@ -7071,6 +7161,51 @@ export default function CrmAdmin() {
     setSavingProfile(false);
   }
 
+  async function handleInteracAccessToggle(enabled: boolean) {
+    if (!selectedProfile) return;
+
+    if (!enabled) {
+      const confirmed = window.confirm(
+        `Disable Interac e-Transfer for ${selectedProfile.full_name || selectedProfile.email}? The client tab will be hidden, but existing requests and history will be preserved.`
+      );
+      if (!confirmed) return;
+    }
+
+    setSavingRecordId(INTERAC_ACCESS_SAVE_ID);
+    setNotice(null);
+
+    const { data, error } = await supabase
+      .from(INTERAC_ACCESS_SETTINGS_TABLE_NAME)
+      .upsert(
+        { user_id: selectedProfile.id, enabled },
+        { onConflict: 'user_id' }
+      )
+      .select()
+      .single();
+
+    if (error) {
+      setNotice({
+        kind: 'error',
+        message: `Could not ${enabled ? 'enable' : 'disable'} Interac e-Transfer: ${error.message}`,
+      });
+    } else if (data) {
+      setTableData((previous) => ({
+        ...previous,
+        [INTERAC_ACCESS_SETTINGS_TABLE_NAME]: [data as AdminRow],
+      }));
+      setTableErrors((previous) => ({
+        ...previous,
+        [INTERAC_ACCESS_SETTINGS_TABLE_NAME]: null,
+      }));
+      setNotice({
+        kind: 'success',
+        message: `Interac e-Transfer ${enabled ? 'enabled' : 'disabled'} for ${selectedProfile.full_name || selectedProfile.email}.`,
+      });
+    }
+
+    setSavingRecordId(null);
+  }
+
   async function handleDeleteUser(confirmation: string) {
     if (!selectedProfile) return;
 
@@ -8334,6 +8469,13 @@ export default function CrmAdmin() {
                 viewerId={user?.id ?? null}
                 profiles={profiles}
                 onSave={handleProfileSave}
+              />
+
+              <InteracAccessControlCard
+                enabled={selectedInteracEnabled}
+                saving={savingRecordId === INTERAC_ACCESS_SAVE_ID}
+                loadError={tableErrors[INTERAC_ACCESS_SETTINGS_TABLE_NAME] || null}
+                onToggle={handleInteracAccessToggle}
               />
 
               <div className="border border-[#006446]/14 bg-white shadow-[0_24px_60px_-48px_rgba(0,100,70,0.45)]">
