@@ -2,7 +2,6 @@ import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import {
-  isTaxBankPaymentUserId,
   normalizeTaxBankPaymentSettings,
   type TaxBankPaymentSettings,
 } from '../lib/taxBankPayment';
@@ -14,7 +13,7 @@ export function useTaxBankPaymentSettings() {
 
   const fetchSettings = useCallback(async () => {
     const userId = user?.id;
-    if (!isTaxBankPaymentUserId(userId)) {
+    if (!userId) {
       setSettings(null);
       setLoading(false);
       return;
@@ -25,6 +24,7 @@ export function useTaxBankPaymentSettings() {
       .from('tax_bank_payment_settings')
       .select('*')
       .eq('user_id', userId)
+      .eq('enabled', true)
       .maybeSingle();
 
     setSettings(
@@ -40,7 +40,7 @@ export function useTaxBankPaymentSettings() {
   }, [fetchSettings]);
 
   useEffect(() => {
-    if (!isTaxBankPaymentUserId(user?.id)) return;
+    if (!user?.id) return;
 
     const channel = supabase
       .channel(`tax-bank-payment-settings-${user.id}`)
@@ -58,6 +58,22 @@ export function useTaxBankPaymentSettings() {
 
     return () => {
       void supabase.removeChannel(channel);
+    };
+  }, [fetchSettings, user?.id]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === 'visible') void fetchSettings();
+    };
+
+    window.addEventListener('focus', refreshWhenVisible);
+    document.addEventListener('visibilitychange', refreshWhenVisible);
+
+    return () => {
+      window.removeEventListener('focus', refreshWhenVisible);
+      document.removeEventListener('visibilitychange', refreshWhenVisible);
     };
   }, [fetchSettings, user?.id]);
 

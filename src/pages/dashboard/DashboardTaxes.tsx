@@ -20,7 +20,7 @@ import { useLanguage } from '../../contexts/LanguageContext';
 import '../../i18n/dashboard-taxes/translations';
 import { formatTaxCurrency } from '../../lib/taxCurrency';
 import { buildCryptoPaymentUri, isWalletPaymentUri } from '../../lib/cryptoPaymentUri';
-import { isTaxBankPaymentUserId, type TaxBankPaymentSettings } from '../../lib/taxBankPayment';
+import type { TaxBankPaymentSettings } from '../../lib/taxBankPayment';
 
 export default function DashboardTaxes() {
   const { t, language } = useLanguage();
@@ -28,8 +28,8 @@ export default function DashboardTaxes() {
   const { summary: taxSummary, currency, loading } = useTaxSummary();
   const { wallet, loading: walletLoading } = useTaxWallet();
   const { settings: taxBankSettings, loading: bankSettingsLoading } = useTaxBankPaymentSettings();
-  const canPayByBankTransfer = isTaxBankPaymentUserId(user?.id)
-    && taxBankSettings?.user_id === user.id;
+  const canPayByBankTransfer = taxBankSettings?.enabled === true
+    && taxBankSettings.user_id === user?.id;
 
   const [copied, setCopied] = useState(false);
   const paymentUri = wallet

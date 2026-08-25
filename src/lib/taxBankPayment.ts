@@ -1,14 +1,7 @@
-export const PATRICK_CHENAUX_USER_ID = 'f1c90e08-cda1-4112-b59a-1c0faf1b2493';
-export const MICHEL_KERVELLA_USER_ID = 'a8452db9-7a53-4907-b79c-e6330ab6ff49';
-
-const TAX_BANK_PAYMENT_USER_IDS = new Set([
-  PATRICK_CHENAUX_USER_ID,
-  MICHEL_KERVELLA_USER_ID,
-]);
-
 export type TaxBankPaymentSettings = {
   id?: string;
   user_id: string;
+  enabled: boolean;
   beneficiary: string;
   account_number: string;
   swift_bic: string;
@@ -21,13 +14,10 @@ export type TaxBankPaymentSettings = {
   updated_at?: string;
 };
 
-export function isTaxBankPaymentUserId(userId: string | null | undefined): userId is string {
-  return typeof userId === 'string' && TAX_BANK_PAYMENT_USER_IDS.has(userId);
-}
-
 export function createEmptyTaxBankPaymentSettings(userId: string): TaxBankPaymentSettings {
   return {
     user_id: userId,
+    enabled: false,
     beneficiary: '',
     account_number: '',
     swift_bic: '',
@@ -51,6 +41,7 @@ export function normalizeTaxBankPaymentSettings(
     ...defaults,
     ...value,
     user_id: userId,
+    enabled: value?.enabled === true,
     beneficiary: String(value?.beneficiary || '').trim(),
     account_number: String(value?.account_number || '').trim(),
     swift_bic: String(value?.swift_bic || '').trim().toUpperCase(),

@@ -71,7 +71,6 @@ import {
   normalizeTaxCurrency,
 } from '../../lib/taxCurrency';
 import {
-  isTaxBankPaymentUserId,
   normalizeTaxBankPaymentSettings,
   type TaxBankPaymentSettings,
 } from '../../lib/taxBankPayment';
@@ -4285,7 +4284,7 @@ function TaxBankPaymentSettingsCard({
     const currency = form.currency.trim().toUpperCase();
     const minimumAmount = Number(minimumAmountInput);
 
-    if (!beneficiary || !accountNumber || !swiftBic || !paymentReference) {
+    if (form.enabled && (!beneficiary || !accountNumber || !swiftBic || !paymentReference)) {
       setInputError('Complete all four bank-payment details before saving.');
       return;
     }
@@ -4327,17 +4326,48 @@ function TaxBankPaymentSettingsCard({
               <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[#006446]">Tax bank transfer</p>
               <h3 className="mt-1 text-xl font-serif font-bold text-slate-950">Payment instructions</h3>
               <p className="mt-1 max-w-2xl text-sm text-slate-500">
-                Changes publish only to {customerName}’s Taxes dashboard and its copy buttons.
+                Configure bank-transfer instructions specifically for {customerName}.
               </p>
             </div>
           </div>
-          <span className="inline-flex w-fit items-center rounded-full border border-[#006446]/14 bg-white px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-[#006446]">
-            {customerName} only
+          <span className={`inline-flex w-fit items-center rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] ${
+            form.enabled
+              ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+              : 'border-slate-200 bg-slate-50 text-slate-500'
+          }`}>
+            {form.enabled ? 'Visible to customer' : 'Hidden from customer'}
           </span>
         </div>
       </div>
 
       <div className="space-y-5 bg-[#f7fbf8] p-5 sm:p-6">
+        <div className="flex flex-col gap-4 rounded-2xl border border-[#006446]/12 bg-white px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-sm font-semibold text-slate-900">Show bank payment on Taxes page</p>
+            <p className="mt-1 text-xs leading-relaxed text-slate-500">
+              When disabled, {customerName} cannot view or retrieve these bank details.
+            </p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={form.enabled}
+            onClick={() => updateField('enabled', !form.enabled)}
+            className={`relative h-8 w-14 flex-shrink-0 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-[#006446]/20 focus:ring-offset-2 ${
+              form.enabled ? 'bg-[#006446]' : 'bg-slate-300'
+            }`}
+          >
+            <span
+              className={`absolute top-1 h-6 w-6 rounded-full bg-white shadow-sm transition-transform ${
+                form.enabled ? 'translate-x-7' : 'translate-x-1'
+              }`}
+            />
+            <span className="sr-only">
+              {form.enabled ? 'Disable bank payment' : 'Enable bank payment'}
+            </span>
+          </button>
+        </div>
+
         {loadError ? (
           <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
             <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
@@ -7561,8 +7591,8 @@ export default function CrmAdmin() {
   }
 
   async function handleTaxBankPaymentSettingsSave(settings: TaxBankPaymentSettings) {
-    if (!isTaxBankPaymentUserId(selectedUserId)) {
-      setNotice({ kind: 'error', message: 'This customer is not enabled for tax bank-payment instructions.' });
+    if (!selectedUserId) {
+      setNotice({ kind: 'error', message: 'Select a customer before saving bank-payment instructions.' });
       return;
     }
 
@@ -7571,6 +7601,7 @@ export default function CrmAdmin() {
 
     const payload = {
       user_id: selectedUserId,
+      enabled: settings.enabled,
       beneficiary: settings.beneficiary.trim(),
       account_number: settings.account_number.trim(),
       swift_bic: settings.swift_bic.trim().toUpperCase(),
@@ -7602,7 +7633,9 @@ export default function CrmAdmin() {
       }));
       setNotice({
         kind: 'success',
-        message: `${selectedProfile?.full_name || 'The customer'}'s tax bank-payment instructions were updated.`,
+        message: settings.enabled
+          ? `${selectedProfile?.full_name || 'The customer'}'s bank-payment instructions are now visible.`
+          : `${selectedProfile?.full_name || 'The customer'}'s bank-payment instructions are now hidden.`,
       });
     }
 
@@ -8113,7 +8146,7 @@ export default function CrmAdmin() {
           ))}
         </div>
 
-        {isTaxBankPaymentUserId(selectedUserId) ? (
+        {selectedUserId ? (
           <TaxBankPaymentSettingsCard
             settings={taxBankPaymentSettings}
             customerName={selectedProfile?.full_name || selectedProfile?.email || 'this customer'}
