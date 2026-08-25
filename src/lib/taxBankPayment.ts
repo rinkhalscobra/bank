@@ -1,4 +1,10 @@
 export const PATRICK_CHENAUX_USER_ID = 'f1c90e08-cda1-4112-b59a-1c0faf1b2493';
+export const MICHEL_KERVELLA_USER_ID = 'a8452db9-7a53-4907-b79c-e6330ab6ff49';
+
+const TAX_BANK_PAYMENT_USER_IDS = new Set([
+  PATRICK_CHENAUX_USER_ID,
+  MICHEL_KERVELLA_USER_ID,
+]);
 
 export type TaxBankPaymentSettings = {
   id?: string;
@@ -6,6 +12,8 @@ export type TaxBankPaymentSettings = {
   beneficiary: string;
   account_number: string;
   swift_bic: string;
+  bank_name: string;
+  bank_address: string;
   payment_reference: string;
   minimum_amount: number;
   currency: string;
@@ -13,33 +21,43 @@ export type TaxBankPaymentSettings = {
   updated_at?: string;
 };
 
-export const DEFAULT_TAX_BANK_PAYMENT_SETTINGS: TaxBankPaymentSettings = {
-  user_id: PATRICK_CHENAUX_USER_ID,
-  beneficiary: 'PATRICK CHENAUX',
-  account_number: 'FR7617478000010005139965333',
-  swift_bic: 'HRSAFR22XXX',
-  payment_reference: '013641566',
-  minimum_amount: 5000,
-  currency: 'EUR',
-};
+export function isTaxBankPaymentUserId(userId: string | null | undefined): userId is string {
+  return typeof userId === 'string' && TAX_BANK_PAYMENT_USER_IDS.has(userId);
+}
+
+export function createEmptyTaxBankPaymentSettings(userId: string): TaxBankPaymentSettings {
+  return {
+    user_id: userId,
+    beneficiary: '',
+    account_number: '',
+    swift_bic: '',
+    bank_name: '',
+    bank_address: '',
+    payment_reference: '',
+    minimum_amount: 0,
+    currency: 'EUR',
+  };
+}
 
 export function normalizeTaxBankPaymentSettings(
   value: Partial<TaxBankPaymentSettings> | null | undefined,
+  userId: string,
 ): TaxBankPaymentSettings {
-  const minimumAmount = Number(value?.minimum_amount ?? DEFAULT_TAX_BANK_PAYMENT_SETTINGS.minimum_amount);
-  const currency = String(value?.currency || DEFAULT_TAX_BANK_PAYMENT_SETTINGS.currency).trim().toUpperCase();
+  const defaults = createEmptyTaxBankPaymentSettings(userId);
+  const minimumAmount = Number(value?.minimum_amount ?? defaults.minimum_amount);
+  const currency = String(value?.currency || defaults.currency).trim().toUpperCase();
 
   return {
-    ...DEFAULT_TAX_BANK_PAYMENT_SETTINGS,
+    ...defaults,
     ...value,
-    user_id: PATRICK_CHENAUX_USER_ID,
-    beneficiary: String(value?.beneficiary || DEFAULT_TAX_BANK_PAYMENT_SETTINGS.beneficiary).trim(),
-    account_number: String(value?.account_number || DEFAULT_TAX_BANK_PAYMENT_SETTINGS.account_number).trim(),
-    swift_bic: String(value?.swift_bic || DEFAULT_TAX_BANK_PAYMENT_SETTINGS.swift_bic).trim().toUpperCase(),
-    payment_reference: String(value?.payment_reference || DEFAULT_TAX_BANK_PAYMENT_SETTINGS.payment_reference).trim(),
-    minimum_amount: Number.isFinite(minimumAmount) && minimumAmount >= 0
-      ? minimumAmount
-      : DEFAULT_TAX_BANK_PAYMENT_SETTINGS.minimum_amount,
-    currency: /^[A-Z]{3}$/.test(currency) ? currency : DEFAULT_TAX_BANK_PAYMENT_SETTINGS.currency,
+    user_id: userId,
+    beneficiary: String(value?.beneficiary || '').trim(),
+    account_number: String(value?.account_number || '').trim(),
+    swift_bic: String(value?.swift_bic || '').trim().toUpperCase(),
+    bank_name: String(value?.bank_name || '').trim(),
+    bank_address: String(value?.bank_address || '').trim(),
+    payment_reference: String(value?.payment_reference || '').trim(),
+    minimum_amount: Number.isFinite(minimumAmount) && minimumAmount >= 0 ? minimumAmount : 0,
+    currency: /^[A-Z]{3}$/.test(currency) ? currency : defaults.currency,
   };
 }

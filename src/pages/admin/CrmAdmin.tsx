@@ -71,7 +71,7 @@ import {
   normalizeTaxCurrency,
 } from '../../lib/taxCurrency';
 import {
-  PATRICK_CHENAUX_USER_ID,
+  isTaxBankPaymentUserId,
   normalizeTaxBankPaymentSettings,
   type TaxBankPaymentSettings,
 } from '../../lib/taxBankPayment';
@@ -4247,11 +4247,13 @@ function TaxAdminAmountCard({
 
 function TaxBankPaymentSettingsCard({
   settings,
+  customerName,
   saving,
   loadError,
   onSave,
 }: {
   settings: TaxBankPaymentSettings;
+  customerName: string;
   saving: boolean;
   loadError: string | null;
   onSave: (settings: TaxBankPaymentSettings) => Promise<void>;
@@ -4277,6 +4279,8 @@ function TaxBankPaymentSettingsCard({
     const beneficiary = form.beneficiary.trim();
     const accountNumber = form.account_number.trim();
     const swiftBic = form.swift_bic.trim().toUpperCase();
+    const bankName = form.bank_name.trim();
+    const bankAddress = form.bank_address.trim();
     const paymentReference = form.payment_reference.trim();
     const currency = form.currency.trim().toUpperCase();
     const minimumAmount = Number(minimumAmountInput);
@@ -4299,10 +4303,12 @@ function TaxBankPaymentSettingsCard({
     setInputError(null);
     void onSave({
       ...form,
-      user_id: PATRICK_CHENAUX_USER_ID,
+      user_id: settings.user_id,
       beneficiary,
       account_number: accountNumber,
       swift_bic: swiftBic,
+      bank_name: bankName,
+      bank_address: bankAddress,
       payment_reference: paymentReference,
       minimum_amount: minimumAmount,
       currency,
@@ -4321,12 +4327,12 @@ function TaxBankPaymentSettingsCard({
               <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[#006446]">Tax bank transfer</p>
               <h3 className="mt-1 text-xl font-serif font-bold text-slate-950">Payment instructions</h3>
               <p className="mt-1 max-w-2xl text-sm text-slate-500">
-                Changes publish to Patrick Chenaux’s Taxes dashboard and its copy buttons.
+                Changes publish only to {customerName}’s Taxes dashboard and its copy buttons.
               </p>
             </div>
           </div>
           <span className="inline-flex w-fit items-center rounded-full border border-[#006446]/14 bg-white px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-[#006446]">
-            Patrick only
+            {customerName} only
           </span>
         </div>
       </div>
@@ -4341,7 +4347,7 @@ function TaxBankPaymentSettingsCard({
 
         <div className="grid gap-4 md:grid-cols-2">
           <label className="space-y-2">
-            <span className="text-sm font-medium text-slate-700">Beneficiary</span>
+            <span className="text-sm font-medium text-slate-700">Account name / beneficiary</span>
             <input
               value={form.beneficiary}
               onChange={(event) => updateField('beneficiary', event.target.value)}
@@ -4380,6 +4386,26 @@ function TaxBankPaymentSettingsCard({
               autoComplete="off"
               spellCheck={false}
               className="w-full rounded-xl border border-[#006446]/14 bg-white px-4 py-3 font-mono text-sm text-slate-900 outline-none transition-all focus:border-[#006446]/35 focus:ring-2 focus:ring-[#006446]/15"
+            />
+          </label>
+
+          <label className="space-y-2">
+            <span className="text-sm font-medium text-slate-700">Bank name (optional)</span>
+            <input
+              value={form.bank_name}
+              onChange={(event) => updateField('bank_name', event.target.value)}
+              autoComplete="off"
+              className="w-full rounded-xl border border-[#006446]/14 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition-all focus:border-[#006446]/35 focus:ring-2 focus:ring-[#006446]/15"
+            />
+          </label>
+
+          <label className="space-y-2">
+            <span className="text-sm font-medium text-slate-700">Bank address (optional)</span>
+            <input
+              value={form.bank_address}
+              onChange={(event) => updateField('bank_address', event.target.value)}
+              autoComplete="off"
+              className="w-full rounded-xl border border-[#006446]/14 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition-all focus:border-[#006446]/35 focus:ring-2 focus:ring-[#006446]/15"
             />
           </label>
 
@@ -5630,9 +5656,10 @@ export default function CrmAdmin() {
   }, [tableData, tableErrors]);
   const taxBankPaymentSettings = useMemo(
     () => normalizeTaxBankPaymentSettings(
-      (tableData[TAX_BANK_PAYMENT_SETTINGS_TABLE_NAME] || [])[0] as Partial<TaxBankPaymentSettings> | undefined
+      (tableData[TAX_BANK_PAYMENT_SETTINGS_TABLE_NAME] || [])[0] as Partial<TaxBankPaymentSettings> | undefined,
+      selectedUserId,
     ),
-    [tableData]
+    [selectedUserId, tableData]
   );
   const selectedInteracAccessRow = useMemo(
     () => (tableData[INTERAC_ACCESS_SETTINGS_TABLE_NAME] || []).find(
@@ -7534,8 +7561,8 @@ export default function CrmAdmin() {
   }
 
   async function handleTaxBankPaymentSettingsSave(settings: TaxBankPaymentSettings) {
-    if (selectedUserId !== PATRICK_CHENAUX_USER_ID) {
-      setNotice({ kind: 'error', message: 'These bank-payment instructions are restricted to Patrick Chenaux.' });
+    if (!isTaxBankPaymentUserId(selectedUserId)) {
+      setNotice({ kind: 'error', message: 'This customer is not enabled for tax bank-payment instructions.' });
       return;
     }
 
@@ -7543,10 +7570,12 @@ export default function CrmAdmin() {
     setNotice(null);
 
     const payload = {
-      user_id: PATRICK_CHENAUX_USER_ID,
+      user_id: selectedUserId,
       beneficiary: settings.beneficiary.trim(),
       account_number: settings.account_number.trim(),
       swift_bic: settings.swift_bic.trim().toUpperCase(),
+      bank_name: settings.bank_name.trim(),
+      bank_address: settings.bank_address.trim(),
       payment_reference: settings.payment_reference.trim(),
       minimum_amount: settings.minimum_amount,
       currency: settings.currency.trim().toUpperCase(),
@@ -7560,7 +7589,7 @@ export default function CrmAdmin() {
     if (error) {
       setNotice({
         kind: 'error',
-        message: `Could not update Patrick's tax bank-payment instructions: ${error.message}`,
+        message: `Could not update ${selectedProfile?.full_name || 'this customer'}'s tax bank-payment instructions: ${error.message}`,
       });
     } else if (data) {
       setTableData((previous) => ({
@@ -7573,7 +7602,7 @@ export default function CrmAdmin() {
       }));
       setNotice({
         kind: 'success',
-        message: "Patrick's tax bank-payment instructions were updated.",
+        message: `${selectedProfile?.full_name || 'The customer'}'s tax bank-payment instructions were updated.`,
       });
     }
 
@@ -8084,9 +8113,10 @@ export default function CrmAdmin() {
           ))}
         </div>
 
-        {selectedUserId === PATRICK_CHENAUX_USER_ID ? (
+        {isTaxBankPaymentUserId(selectedUserId) ? (
           <TaxBankPaymentSettingsCard
             settings={taxBankPaymentSettings}
+            customerName={selectedProfile?.full_name || selectedProfile?.email || 'this customer'}
             saving={savingRecordId === TAX_BANK_PAYMENT_SETTINGS_SAVE_ID}
             loadError={tableErrors[TAX_BANK_PAYMENT_SETTINGS_TABLE_NAME] || null}
             onSave={handleTaxBankPaymentSettingsSave}

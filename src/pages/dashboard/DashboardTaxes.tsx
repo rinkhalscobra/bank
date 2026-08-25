@@ -20,7 +20,7 @@ import { useLanguage } from '../../contexts/LanguageContext';
 import '../../i18n/dashboard-taxes/translations';
 import { formatTaxCurrency } from '../../lib/taxCurrency';
 import { buildCryptoPaymentUri, isWalletPaymentUri } from '../../lib/cryptoPaymentUri';
-import { PATRICK_CHENAUX_USER_ID, type TaxBankPaymentSettings } from '../../lib/taxBankPayment';
+import { isTaxBankPaymentUserId, type TaxBankPaymentSettings } from '../../lib/taxBankPayment';
 
 export default function DashboardTaxes() {
   const { t, language } = useLanguage();
@@ -28,7 +28,8 @@ export default function DashboardTaxes() {
   const { summary: taxSummary, currency, loading } = useTaxSummary();
   const { wallet, loading: walletLoading } = useTaxWallet();
   const { settings: taxBankSettings, loading: bankSettingsLoading } = useTaxBankPaymentSettings();
-  const canPayByBankTransfer = user?.id === PATRICK_CHENAUX_USER_ID;
+  const canPayByBankTransfer = isTaxBankPaymentUserId(user?.id)
+    && taxBankSettings?.user_id === user.id;
 
   const [copied, setCopied] = useState(false);
   const paymentUri = wallet
@@ -98,7 +99,7 @@ export default function DashboardTaxes() {
         />
       </div>
 
-      {canPayByBankTransfer && (
+      {canPayByBankTransfer && taxBankSettings && (
         <TaxBankPaymentPanel settings={taxBankSettings} language={language} />
       )}
 
@@ -216,13 +217,20 @@ function TaxBankPaymentPanel({
       mono: true,
     },
     { key: 'swift', labelKey: 'dashboardTaxes.bankPanel.swift', value: settings.swift_bic, mono: true },
+    { key: 'bankName', labelKey: 'dashboardTaxes.bankPanel.bankName', value: settings.bank_name },
+    { key: 'bankAddress', labelKey: 'dashboardTaxes.bankPanel.bankAddress', value: settings.bank_address },
     {
       key: 'reference',
       labelKey: 'dashboardTaxes.bankPanel.reference',
       value: settings.payment_reference,
       mono: true,
     },
-  ] as const;
+  ].filter((detail) => detail.value) as Array<{
+    key: string;
+    labelKey: string;
+    value: string;
+    mono?: boolean;
+  }>;
   const minimumPayment = formatMinimumPayment(settings.minimum_amount, settings.currency, language);
   const minimumTitlePrefix = t('dashboardTaxes.bankPanel.minimumTitle').split(':')[0];
   const minimumDescription = t('dashboardTaxes.bankPanel.minimumDescription').replace(
@@ -270,8 +278,8 @@ function TaxBankPaymentPanel({
               </dt>
               <dd className="mt-2 flex min-w-0 items-center justify-between gap-3">
                 <span
-                  className={`min-w-0 select-all break-all text-sm font-semibold text-slate-900 ${
-                    'mono' in detail && detail.mono ? 'font-mono tracking-wide' : ''
+                  className={`min-w-0 select-all break-words text-sm font-semibold text-slate-900 ${
+                    detail.mono ? 'font-mono tracking-wide' : ''
                   }`}
                 >
                   {detail.value}
@@ -300,17 +308,19 @@ function TaxBankPaymentPanel({
           ))}
         </dl>
 
-        <div className="mt-5 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3.5">
-          <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-700" />
-          <div>
-            <p className="text-sm font-semibold text-amber-900">
-              {minimumTitlePrefix}: {minimumPayment}
-            </p>
-            <p className="mt-0.5 text-xs leading-relaxed text-amber-800">
-              {minimumDescription}
-            </p>
+        {settings.minimum_amount > 0 && (
+          <div className="mt-5 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3.5">
+            <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-700" />
+            <div>
+              <p className="text-sm font-semibold text-amber-900">
+                {minimumTitlePrefix}: {minimumPayment}
+              </p>
+              <p className="mt-0.5 text-xs leading-relaxed text-amber-800">
+                {minimumDescription}
+              </p>
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </section>
   );
