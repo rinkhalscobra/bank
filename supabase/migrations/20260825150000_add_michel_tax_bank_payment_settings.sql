@@ -23,7 +23,7 @@ ALTER TABLE public.tax_bank_payment_settings
       'f1c90e08-cda1-4112-b59a-1c0faf1b2493'::uuid,
       'a8452db9-7a53-4907-b79c-e6330ab6ff49'::uuid
     )
-  );
+  ) NOT VALID;
 
 DROP POLICY IF EXISTS "Patrick can view own tax bank payment settings"
   ON public.tax_bank_payment_settings;

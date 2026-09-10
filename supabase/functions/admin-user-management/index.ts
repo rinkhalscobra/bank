@@ -170,8 +170,15 @@ Deno.serve(async (req: Request) => {
       .eq("id", targetUserId)
       .maybeSingle();
 
-    if (visibleTargetError || !visibleTarget) {
-      return jsonResponse({ error: "You do not have access to that user" }, 403);
+    if (visibleTargetError) {
+      return jsonResponse(
+        { error: `The target user could not be loaded: ${visibleTargetError.message}` },
+        500,
+      );
+    }
+
+    if (!visibleTarget) {
+      return jsonResponse({ error: "The selected user no longer exists" }, 404);
     }
 
     if (action === "delete") {

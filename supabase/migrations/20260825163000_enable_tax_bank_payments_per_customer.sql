@@ -9,12 +9,12 @@
 ALTER TABLE public.tax_bank_payment_settings
   ADD COLUMN IF NOT EXISTS enabled boolean NOT NULL DEFAULT false;
 
-UPDATE public.tax_bank_payment_settings
-SET enabled = true;
-
 ALTER TABLE public.tax_bank_payment_settings
   DROP CONSTRAINT IF EXISTS tax_bank_payment_settings_patrick_only_check,
   DROP CONSTRAINT IF EXISTS tax_bank_payment_settings_customer_only_check;
+
+UPDATE public.tax_bank_payment_settings
+SET enabled = true;
 
 ALTER TABLE public.tax_bank_payment_settings
   DROP CONSTRAINT IF EXISTS tax_bank_payment_settings_beneficiary_check,

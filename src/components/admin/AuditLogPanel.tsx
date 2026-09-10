@@ -57,7 +57,39 @@ type CategoryOption = {
   icon: LucideIcon;
 };
 
+type AuditLogResponse = {
+  entries?: AuditLogEntry[];
+  total?: number;
+};
+
 const PAGE_SIZE = 30;
+
+function isPermissionError(error: { code?: string; message?: string } | null) {
+  return error?.code === '42501' || Boolean(error?.message?.toLowerCase().includes('permission denied'));
+}
+
+async function fetchAuditLogs(params: {
+  category: AuditCategory;
+  source: AuditSource;
+  search: string;
+  page: number;
+}) {
+  const runQuery = () => supabase.rpc('get_audit_logs', {
+    p_category: params.category,
+    p_source: params.source,
+    p_search: params.search,
+    p_offset: (params.page - 1) * PAGE_SIZE,
+    p_limit: PAGE_SIZE,
+  });
+
+  let result = await runQuery();
+  if (isPermissionError(result.error)) {
+    const { error: refreshError } = await supabase.auth.refreshSession();
+    if (!refreshError) result = await runQuery();
+  }
+
+  return result;
+}
 
 const CATEGORIES: CategoryOption[] = [
   { value: 'all', label: 'All activity', icon: Activity },
@@ -147,39 +179,16 @@ export default function AuditLogPanel() {
     setLoading(true);
     setError(null);
 
-    let query = supabase
-      .from('audit_logs')
-      .select('*', { count: 'exact' })
-      .order('occurred_at', { ascending: false })
-      .range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1);
-
-    if (category !== 'all') query = query.eq('category', category);
-    if (source !== 'all') query = query.eq('source_surface', source);
-
-    const safeSearch = search.trim().replace(/[,()%]/g, ' ');
-    if (safeSearch) {
-      const pattern = `%${safeSearch}%`;
-      query = query.or([
-        `actor_name.ilike.${pattern}`,
-        `actor_email.ilike.${pattern}`,
-        `actor_ip.ilike.${pattern}`,
-        `summary.ilike.${pattern}`,
-        `table_name.ilike.${pattern}`,
-        `record_id.ilike.${pattern}`,
-        `source_surface.ilike.${pattern}`,
-        `source_path.ilike.${pattern}`,
-      ].join(','));
-    }
-
-    const { data, error: queryError, count } = await query;
+    const { data, error: queryError } = await fetchAuditLogs({ category, source, search, page });
 
     if (queryError) {
       setEntries([]);
       setTotal(0);
       setError(queryError.message);
     } else {
-      setEntries((data ?? []) as AuditLogEntry[]);
-      setTotal(count ?? 0);
+      const response = (data ?? {}) as AuditLogResponse;
+      setEntries(Array.isArray(response.entries) ? response.entries : []);
+      setTotal(Number(response.total) || 0);
       setSelectedIds([]);
     }
 
@@ -221,10 +230,13 @@ export default function AuditLogPanel() {
 
     setDeleting(true);
     const idsToDelete = [...pendingDeleteIds];
-    const { error: deleteError } = await supabase
-      .from('audit_logs')
-      .delete()
-      .in('id', idsToDelete);
+    const runDelete = () => supabase.rpc('delete_audit_logs', { p_ids: idsToDelete });
+    let { error: deleteError } = await runDelete();
+
+    if (isPermissionError(deleteError)) {
+      const { error: refreshError } = await supabase.auth.refreshSession();
+      if (!refreshError) ({ error: deleteError } = await runDelete());
+    }
 
     if (deleteError) {
       setError(deleteError.message);
