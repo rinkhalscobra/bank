@@ -11,6 +11,14 @@ const corsHeaders = {
 type CrmRole = "customer" | "agent" | "superior_manager" | "admin";
 type AdminClient = ReturnType<typeof createClient>;
 
+function getClientIp(req: Request) {
+  const forwardedFor = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
+  return req.headers.get("cf-connecting-ip")?.trim()
+    || forwardedFor
+    || req.headers.get("x-real-ip")?.trim()
+    || null;
+}
+
 function jsonResponse(body: Record<string, unknown>, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
@@ -139,7 +147,24 @@ Deno.serve(async (req: Request) => {
       return jsonResponse({ error: "user_id is required" }, 400);
     }
 
-    const { data: visibleTarget, error: visibleTargetError } = await callerClient
+    const { data: canManageTarget, error: accessError } = await adminClient.rpc(
+      "can_crm_user_manage_profile_from_ip",
+      {
+        p_actor_id: caller.id,
+        p_target_id: targetUserId,
+        p_client_ip: getClientIp(req),
+      },
+    );
+
+    if (accessError) {
+      return jsonResponse({ error: `Could not verify CRM network access: ${accessError.message}` }, 503);
+    }
+
+    if (!canManageTarget) {
+      return jsonResponse({ error: "This network is not allowed to manage that user" }, 403);
+    }
+
+    const { data: visibleTarget, error: visibleTargetError } = await adminClient
       .from("profiles")
       .select("id, email, full_name, crm_role, is_admin")
       .eq("id", targetUserId)
