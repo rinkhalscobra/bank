@@ -11,6 +11,7 @@ import {
   HandCoins,
   KeyRound,
   Landmark,
+  LayoutDashboard,
   Loader2,
   ReceiptText,
   RefreshCw,
@@ -23,6 +24,7 @@ import {
 import { supabase } from '../../lib/supabase';
 
 type AuditCategory = 'all' | 'auth' | 'users' | 'balances' | 'transactions' | 'transfers' | 'payments' | 'loans' | 'settings' | 'other';
+type AuditSource = 'all' | 'customer_dashboard' | 'crm_admin' | 'authentication' | 'public_site' | 'system' | 'unknown';
 
 type AuditLogEntry = {
   id: number;
@@ -44,6 +46,8 @@ type AuditLogEntry = {
   old_data: Record<string, unknown> | null;
   new_data: Record<string, unknown> | null;
   metadata: Record<string, unknown> | null;
+  source_surface: Exclude<AuditSource, 'all'>;
+  source_path: string | null;
 };
 
 type CategoryOption = {
@@ -79,6 +83,16 @@ const CATEGORY_STYLES: Record<Exclude<AuditCategory, 'all'>, string> = {
   other: 'border-slate-200 bg-white text-slate-600',
 };
 
+const SOURCES: Array<{ value: AuditSource; label: string }> = [
+  { value: 'all', label: 'All sources' },
+  { value: 'customer_dashboard', label: 'Customer dashboard' },
+  { value: 'crm_admin', label: 'CRM Admin' },
+  { value: 'authentication', label: 'Online banking' },
+  { value: 'public_site', label: 'Public website' },
+  { value: 'system', label: 'Automated system' },
+  { value: 'unknown', label: 'Unknown source' },
+];
+
 function humanize(value: string) {
   return value.replace(/[_.]/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
@@ -97,6 +111,10 @@ function displayActor(entry: AuditLogEntry) {
   return 'Anonymous visitor';
 }
 
+function sourceLabel(value: AuditLogEntry['source_surface']) {
+  return SOURCES.find((source) => source.value === value)?.label ?? 'Unknown source';
+}
+
 function JsonDetails({ label, value }: { label: string; value: Record<string, unknown> | null }) {
   if (!value || Object.keys(value).length === 0) return null;
 
@@ -112,6 +130,7 @@ function JsonDetails({ label, value }: { label: string; value: Record<string, un
 
 export default function AuditLogPanel() {
   const [category, setCategory] = useState<AuditCategory>('all');
+  const [source, setSource] = useState<AuditSource>('all');
   const [entries, setEntries] = useState<AuditLogEntry[]>([]);
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
@@ -131,6 +150,7 @@ export default function AuditLogPanel() {
       .range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1);
 
     if (category !== 'all') query = query.eq('category', category);
+    if (source !== 'all') query = query.eq('source_surface', source);
 
     const safeSearch = search.trim().replace(/[,()%]/g, ' ');
     if (safeSearch) {
@@ -142,6 +162,8 @@ export default function AuditLogPanel() {
         `summary.ilike.${pattern}`,
         `table_name.ilike.${pattern}`,
         `record_id.ilike.${pattern}`,
+        `source_surface.ilike.${pattern}`,
+        `source_path.ilike.${pattern}`,
       ].join(','));
     }
 
@@ -157,7 +179,7 @@ export default function AuditLogPanel() {
     }
 
     setLoading(false);
-  }, [category, page, search]);
+  }, [category, page, search, source]);
 
   useEffect(() => {
     void loadEntries();
@@ -246,6 +268,28 @@ export default function AuditLogPanel() {
             );
           })}
         </div>
+        <div className="mt-3 flex items-center gap-2 overflow-x-auto border-t border-slate-200/80 pt-3">
+          <span className="flex-shrink-0 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Made from</span>
+          {SOURCES.map((option) => {
+            const active = option.value === source;
+            return (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => {
+                  setSource(option.value);
+                  setPage(1);
+                }}
+                aria-pressed={active}
+                className={`flex-shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${
+                  active ? 'bg-slate-900 text-white' : 'bg-white text-slate-600 ring-1 ring-slate-200 hover:text-slate-900'
+                }`}
+              >
+                {option.label}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       <div className="bg-[#f7fbf8] p-4 sm:p-6">
@@ -299,15 +343,25 @@ export default function AuditLogPanel() {
                         <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
                           <span className="inline-flex items-center gap-1.5"><UserRound className="h-3.5 w-3.5" />{displayActor(entry)}</span>
                           <span className="inline-flex items-center gap-1.5"><Globe2 className="h-3.5 w-3.5" /><span className="font-mono">{entry.actor_ip ?? 'IP unavailable'}</span></span>
+                          <span className="inline-flex items-center gap-1.5 font-semibold text-slate-700">
+                            <LayoutDashboard className="h-3.5 w-3.5" />
+                            {sourceLabel(entry.source_surface)}{entry.source_path ? ` · ${entry.source_path}` : ''}
+                          </span>
                           <span>{new Date(entry.occurred_at).toLocaleString()}</span>
                         </div>
                       </div>
                     </div>
 
-                    <div className="grid flex-shrink-0 gap-2 text-xs sm:grid-cols-2 xl:w-[360px]">
+                    <div className="grid flex-shrink-0 gap-2 text-xs sm:grid-cols-3 xl:w-[560px]">
                       <div className="rounded-xl bg-slate-50 px-3 py-2">
                         <span className="text-slate-500">Area</span>
                         <p className="mt-0.5 truncate font-semibold text-slate-800">{humanize(entry.table_name)}</p>
+                      </div>
+                      <div className="rounded-xl bg-slate-50 px-3 py-2">
+                        <span className="text-slate-500">Made from</span>
+                        <p className="mt-0.5 truncate font-semibold text-slate-800" title={entry.source_path ?? undefined}>
+                          {sourceLabel(entry.source_surface)}
+                        </p>
                       </div>
                       <div className="rounded-xl bg-slate-50 px-3 py-2">
                         <span className="text-slate-500">Record</span>
