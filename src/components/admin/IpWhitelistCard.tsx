@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertCircle, CheckCircle2, Info, Loader2, Plus, RefreshCw, Save, ShieldCheck } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Info, Loader2, Plus, RefreshCw, Save, ShieldCheck, X } from 'lucide-react';
 import {
   getIpAllowlistConfig,
   saveIpAllowlistConfig,
@@ -49,6 +49,12 @@ export default function IpWhitelistCard() {
     if (!config?.currentIp) return;
     const nextEntries = parseEntries(`${entries}\n${config.currentIp}`);
     setEntries(nextEntries.join('\n'));
+    setError(null);
+    setSuccess(null);
+  }
+
+  function removeEntry(entryToRemove: string) {
+    setEntries(parsedEntries.filter((entry) => entry !== entryToRemove).join('\n'));
     setError(null);
     setSuccess(null);
   }
@@ -170,6 +176,48 @@ export default function IpWhitelistCard() {
               <span>{parsedEntries.length} {parsedEntries.length === 1 ? 'entry' : 'entries'}</span>
               <span>Your current IP: <span className="font-mono font-semibold text-slate-700">{config.currentIp ?? 'Unavailable'}</span></span>
             </div>
+          </div>
+
+          <div className="overflow-hidden rounded-2xl border border-slate-200">
+            <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-3">
+              <div>
+                <h3 className="text-sm font-semibold text-slate-900">Allowed IPs</h3>
+                <p className="mt-0.5 text-xs text-slate-500">Addresses and networks that will be permitted after saving.</p>
+              </div>
+              <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-600">
+                {parsedEntries.length}
+              </span>
+            </div>
+            {parsedEntries.length > 0 ? (
+              <ul className="divide-y divide-slate-100" aria-label="Allowed IP addresses and networks">
+                {parsedEntries.map((entry) => {
+                  const isSingleAddress = !entry.includes('/') || entry.endsWith('/32') || entry.endsWith('/128');
+
+                  return (
+                    <li key={entry} className="flex items-center justify-between gap-4 px-4 py-3">
+                      <div className="min-w-0">
+                        <p className="break-all font-mono text-sm font-semibold text-slate-900">{entry}</p>
+                        <p className="mt-0.5 text-xs text-slate-500">{isSingleAddress ? 'Single IP address' : 'Network range'}</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => removeEntry(entry)}
+                        className="inline-flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2"
+                        aria-label={`Remove ${entry}`}
+                        title={`Remove ${entry}`}
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : (
+              <div className="px-4 py-8 text-center">
+                <p className="text-sm font-semibold text-slate-700">No allowed IPs added</p>
+                <p className="mt-1 text-xs text-slate-500">Enter an address above or add your current IP.</p>
+              </div>
+            )}
           </div>
 
           <div className="flex items-start gap-3 rounded-2xl border border-blue-100 bg-blue-50/70 px-4 py-3 text-sm text-blue-900">
