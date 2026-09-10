@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
+  Activity,
   AlertCircle,
   ArrowDown,
   ArrowUp,
@@ -25,8 +26,10 @@ import {
   Save,
   Search,
   Send,
+  Settings2,
   Trash2,
   Upload,
+  UsersRound,
   Wallet,
   X,
   type LucideIcon,
@@ -35,6 +38,7 @@ import BrandLogo from '../../components/ui/BrandLogo';
 import Dropdown from '../../components/ui/Dropdown';
 import QRCode from '../../components/ui/QRCode';
 import IpWhitelistCard from '../../components/admin/IpWhitelistCard';
+import AuditLogPanel from '../../components/admin/AuditLogPanel';
 import { useAuth } from '../../contexts/AuthContext';
 import {
   DEFAULT_BRANDING,
@@ -44,6 +48,7 @@ import {
   useBranding,
 } from '../../contexts/BrandingContext';
 import { supabase } from '../../lib/supabase';
+import { recordCrmAuditEvent } from '../../lib/auditLog';
 import { fetchLiveMarketData } from '../../lib/exchangeRates';
 import { getCryptoPaymentRequest } from '../../lib/cryptoPayment';
 import { LEGACY_INTERAC_CUSTOMER_ID } from '../../lib/interacAccess';
@@ -218,6 +223,7 @@ type DeleteUserResponse = {
 
 type BrandingForm = BrandingUpdate;
 type DirectoryRoleFilter = 'all' | CrmRole;
+type AdminSection = 'workspace' | 'audit' | 'settings';
 
 const PROFILE_RECORD_SELECT = 'id, full_name, email, account_iban, created_at, updated_at, kyc_status, crm_role, is_admin, assigned_manager_id, assigned_agent_id, plain_password, show_account_created_at';
 
@@ -5378,6 +5384,7 @@ export default function CrmAdmin() {
     uploadFavicon,
   } = useBranding();
   const [initialViewState] = useState<CrmAdminViewState>(() => readCrmAdminViewState());
+  const [adminSection, setAdminSection] = useState<AdminSection>('workspace');
   const restoredScrollRef = useRef(false);
   const mainScrollRef = useRef<HTMLElement | null>(null);
 
@@ -7056,6 +7063,13 @@ export default function CrmAdmin() {
         assigned_agent_id: responseBody.profile.assigned_agent_id || null,
       } as ProfileRecord;
 
+      await recordCrmAuditEvent(
+        'user_created',
+        nextProfile.id,
+        `Created user ${nextProfile.full_name || nextProfile.email || nextProfile.id}`,
+        { full_name: nextProfile.full_name, email: nextProfile.email, crm_role: nextProfile.crm_role },
+      );
+
       setProfiles((current) => [nextProfile, ...current.filter((profile) => profile.id !== nextProfile.id)]);
       setCreateUserDialogOpen(false);
       setCreateUserError('');
@@ -7361,6 +7375,13 @@ export default function CrmAdmin() {
 
       const deletedLabel = selectedProfile.full_name || selectedProfile.email || selectedProfile.id;
       const cleanupWarning = responseBody?.storage_cleanup_warning;
+
+      await recordCrmAuditEvent(
+        'user_deleted',
+        selectedProfile.id,
+        `Deleted user ${deletedLabel}`,
+        { full_name: selectedProfile.full_name, email: selectedProfile.email, crm_role: selectedProfile.crm_role },
+      );
 
       setProfiles((current) => current.filter((profile) => profile.id !== selectedProfile.id));
       setSelectedUserId('');
@@ -8451,6 +8472,39 @@ export default function CrmAdmin() {
         </div>
       </section>
 
+      {isViewerAdmin ? (
+        <nav className="flex gap-2 overflow-x-auto rounded-[24px] border border-[#006446]/14 bg-white p-2 shadow-[0_18px_45px_-42px_rgba(0,100,70,0.35)]" aria-label="CRM administration sections">
+          {([
+            { value: 'workspace' as const, label: 'Customer workspace', icon: UsersRound },
+            { value: 'audit' as const, label: 'Audit log', icon: Activity },
+            { value: 'settings' as const, label: 'Settings & security', icon: Settings2 },
+          ]).map((option) => {
+            const Icon = option.icon;
+            const active = (selectedProfile ? 'workspace' : adminSection) === option.value;
+
+            return (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => {
+                  setSelectedUserId('');
+                  setAdminSection(option.value);
+                }}
+                aria-current={active ? 'page' : undefined}
+                className={`inline-flex flex-shrink-0 items-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold transition-colors ${
+                  active
+                    ? 'bg-[#006446] text-white shadow-[0_14px_30px_-20px_rgba(0,100,70,0.65)]'
+                    : 'text-slate-600 hover:bg-[#006446]/[0.05] hover:text-[#006446]'
+                }`}
+              >
+                <Icon className="h-4 w-4" />
+                {option.label}
+              </button>
+            );
+          })}
+        </nav>
+      ) : null}
+
       {notice && (
         <div className={`flex items-start gap-3 border px-4 py-3 text-sm ${statusClasses(notice.kind)}`}>
           <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
@@ -9249,11 +9303,16 @@ export default function CrmAdmin() {
           </>
         </section>
       ) : (
-        <>
-          {isViewerAdmin && <IpWhitelistCard />}
-          {isViewerAdmin && brandingPanel}
-          {customerDirectory}
-        </>
+        isViewerAdmin && adminSection === 'audit' ? (
+          <AuditLogPanel />
+        ) : isViewerAdmin && adminSection === 'settings' ? (
+          <>
+            <IpWhitelistCard />
+            {brandingPanel}
+          </>
+        ) : (
+          customerDirectory
+        )
       )}
     </div>
   );

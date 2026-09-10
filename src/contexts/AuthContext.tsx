@@ -33,6 +33,23 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+async function recordAuthAuditEvent(
+  eventType: 'signup_succeeded' | 'signup_failed' | 'login_succeeded' | 'login_failed' | 'logout',
+  email?: string,
+  subjectUserId?: string,
+) {
+  const { error } = await supabase.rpc('record_auth_audit_event', {
+    p_event_type: eventType,
+    p_subject_email: email || null,
+    p_subject_user_id: subjectUserId || null,
+    p_metadata: { source: 'web_app' },
+  });
+
+  if (error) {
+    console.warn('Could not record authentication audit event:', error.message);
+  }
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
@@ -202,22 +219,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [ensureDefaultFiatBalances, fetchProfileState]);
 
   const signUp = async (email: string, password: string, fullName: string) => {
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: { data: { full_name: fullName } },
     });
+    await recordAuthAuditEvent(
+      error ? 'signup_failed' : 'signup_succeeded',
+      email,
+      data.user?.id,
+    );
     if (error) return { error: error.message };
     return { error: null };
   };
 
   const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    await recordAuthAuditEvent(
+      error ? 'login_failed' : 'login_succeeded',
+      email,
+      data.user?.id,
+    );
     if (error) return { error: error.message };
     return { error: null };
   };
 
   const signOut = async () => {
+    await recordAuthAuditEvent('logout', user?.email, user?.id);
     await supabase.auth.signOut();
   };
 
