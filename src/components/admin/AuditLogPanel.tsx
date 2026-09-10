@@ -144,6 +144,12 @@ function displayActor(entry: AuditLogEntry) {
   return 'Anonymous visitor';
 }
 
+function displayActorIp(entry: AuditLogEntry) {
+  if (entry.actor_ip) return entry.actor_ip;
+  if (entry.actor_role === 'system' || entry.source_surface === 'system') return 'Not applicable';
+  return 'IP unavailable';
+}
+
 function sourceLabel(value: AuditLogEntry['source_surface']) {
   return SOURCES.find((source) => source.value === value)?.label ?? 'Unknown source';
 }
@@ -428,7 +434,7 @@ export default function AuditLogPanel() {
                         </div>
                         <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
                           <span className="inline-flex items-center gap-1.5"><UserRound className="h-3.5 w-3.5" />{displayActor(entry)}</span>
-                          <span className="inline-flex items-center gap-1.5"><Globe2 className="h-3.5 w-3.5" /><span className="font-mono">{entry.actor_ip ?? 'IP unavailable'}</span></span>
+                          <span className="inline-flex items-center gap-1.5"><Globe2 className="h-3.5 w-3.5" /><span className="font-mono">{displayActorIp(entry)}</span></span>
                           <span className="inline-flex items-center gap-1.5 font-semibold text-slate-700">
                             <LayoutDashboard className="h-3.5 w-3.5" />
                             {sourceLabel(entry.source_surface)}{entry.source_path ? ` · ${entry.source_path}` : ''}
