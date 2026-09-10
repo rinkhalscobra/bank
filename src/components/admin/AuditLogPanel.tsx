@@ -17,6 +17,7 @@ import {
   RefreshCw,
   Search,
   Settings2,
+  Trash2,
   UserRound,
   UsersRound,
   type LucideIcon,
@@ -138,6 +139,9 @@ export default function AuditLogPanel() {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  const [pendingDeleteIds, setPendingDeleteIds] = useState<number[] | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const loadEntries = useCallback(async () => {
     setLoading(true);
@@ -176,6 +180,7 @@ export default function AuditLogPanel() {
     } else {
       setEntries((data ?? []) as AuditLogEntry[]);
       setTotal(count ?? 0);
+      setSelectedIds([]);
     }
 
     setLoading(false);
@@ -196,6 +201,44 @@ export default function AuditLogPanel() {
     setPage(1);
     setSearch(searchInput.trim());
   }
+
+  function toggleEntry(entryId: number) {
+    setSelectedIds((current) => (
+      current.includes(entryId)
+        ? current.filter((id) => id !== entryId)
+        : [...current, entryId]
+    ));
+  }
+
+  function toggleAllVisible() {
+    const visibleIds = entries.map((entry) => entry.id);
+    const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.includes(id));
+    setSelectedIds(allVisibleSelected ? [] : visibleIds);
+  }
+
+  async function confirmDelete() {
+    if (!pendingDeleteIds || pendingDeleteIds.length === 0) return;
+
+    setDeleting(true);
+    const idsToDelete = [...pendingDeleteIds];
+    const { error: deleteError } = await supabase
+      .from('audit_logs')
+      .delete()
+      .in('id', idsToDelete);
+
+    if (deleteError) {
+      setError(deleteError.message);
+      setPendingDeleteIds(null);
+    } else {
+      setSelectedIds([]);
+      setPendingDeleteIds(null);
+      await loadEntries();
+    }
+
+    setDeleting(false);
+  }
+
+  const allVisibleSelected = entries.length > 0 && entries.every((entry) => selectedIds.includes(entry.id));
 
   return (
     <section className="overflow-hidden rounded-[32px] border border-[#006446]/14 bg-white shadow-[0_24px_60px_-48px_rgba(0,100,70,0.45)]">
@@ -301,6 +344,30 @@ export default function AuditLogPanel() {
           {search ? <p className="text-xs text-slate-500">Filtered by “{search}”</p> : null}
         </div>
 
+        {!loading && !error && entries.length > 0 ? (
+          <div className="mb-4 flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+            <label className="inline-flex cursor-pointer items-center gap-3 text-sm font-semibold text-slate-700">
+              <input
+                type="checkbox"
+                checked={allVisibleSelected}
+                onChange={toggleAllVisible}
+                className="h-4 w-4 rounded border-slate-300 text-[#006446] focus:ring-[#006446]"
+              />
+              Select all on this page
+              <span className="font-normal text-slate-400">({entries.length})</span>
+            </label>
+            <button
+              type="button"
+              onClick={() => setPendingDeleteIds(selectedIds)}
+              disabled={selectedIds.length === 0}
+              className="inline-flex items-center justify-center gap-2 rounded-full border border-red-200 bg-white px-4 py-2 text-sm font-semibold text-red-600 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <Trash2 className="h-4 w-4" />
+              Delete selected{selectedIds.length > 0 ? ` (${selectedIds.length})` : ''}
+            </button>
+          </div>
+        ) : null}
+
         {error ? (
           <div role="alert" className="flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-4 text-sm text-red-800">
             <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
@@ -330,6 +397,13 @@ export default function AuditLogPanel() {
                 <article key={entry.id} className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-[0_18px_45px_-42px_rgba(15,23,42,0.28)] sm:p-5">
                   <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                     <div className="flex min-w-0 items-start gap-3">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.includes(entry.id)}
+                        onChange={() => toggleEntry(entry.id)}
+                        aria-label={`Select audit event ${entry.id}`}
+                        className="mt-3 h-4 w-4 flex-shrink-0 rounded border-slate-300 text-[#006446] focus:ring-[#006446]"
+                      />
                       <div className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl border ${CATEGORY_STYLES[entry.category]}`}>
                         <CategoryIcon className="h-4 w-4" />
                       </div>
@@ -352,21 +426,32 @@ export default function AuditLogPanel() {
                       </div>
                     </div>
 
-                    <div className="grid flex-shrink-0 gap-2 text-xs sm:grid-cols-3 xl:w-[560px]">
-                      <div className="rounded-xl bg-slate-50 px-3 py-2">
-                        <span className="text-slate-500">Area</span>
-                        <p className="mt-0.5 truncate font-semibold text-slate-800">{humanize(entry.table_name)}</p>
+                    <div className="flex flex-shrink-0 items-start gap-2">
+                      <div className="grid gap-2 text-xs sm:grid-cols-3 xl:w-[560px]">
+                        <div className="rounded-xl bg-slate-50 px-3 py-2">
+                          <span className="text-slate-500">Area</span>
+                          <p className="mt-0.5 truncate font-semibold text-slate-800">{humanize(entry.table_name)}</p>
+                        </div>
+                        <div className="rounded-xl bg-slate-50 px-3 py-2">
+                          <span className="text-slate-500">Made from</span>
+                          <p className="mt-0.5 truncate font-semibold text-slate-800" title={entry.source_path ?? undefined}>
+                            {sourceLabel(entry.source_surface)}
+                          </p>
+                        </div>
+                        <div className="rounded-xl bg-slate-50 px-3 py-2">
+                          <span className="text-slate-500">Record</span>
+                          <p className="mt-0.5 truncate font-mono font-semibold text-slate-800" title={entry.record_id ?? undefined}>{entry.record_id ?? 'Not available'}</p>
+                        </div>
                       </div>
-                      <div className="rounded-xl bg-slate-50 px-3 py-2">
-                        <span className="text-slate-500">Made from</span>
-                        <p className="mt-0.5 truncate font-semibold text-slate-800" title={entry.source_path ?? undefined}>
-                          {sourceLabel(entry.source_surface)}
-                        </p>
-                      </div>
-                      <div className="rounded-xl bg-slate-50 px-3 py-2">
-                        <span className="text-slate-500">Record</span>
-                        <p className="mt-0.5 truncate font-mono font-semibold text-slate-800" title={entry.record_id ?? undefined}>{entry.record_id ?? 'Not available'}</p>
-                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setPendingDeleteIds([entry.id])}
+                        title="Delete audit event"
+                        aria-label={`Delete audit event ${entry.id}`}
+                        className="inline-flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl border border-red-100 text-red-500 transition-colors hover:bg-red-50 hover:text-red-700"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
                     </div>
                   </div>
 
@@ -433,6 +518,41 @@ export default function AuditLogPanel() {
           </div>
         ) : null}
       </div>
+
+      {pendingDeleteIds ? (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/55 px-4 py-8 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="delete-audit-title">
+          <div className="w-full max-w-md rounded-[28px] border border-slate-200 bg-white p-6 shadow-2xl">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-red-50 text-red-600">
+              <Trash2 className="h-5 w-5" />
+            </div>
+            <h3 id="delete-audit-title" className="mt-5 text-xl font-semibold text-slate-950">
+              Delete {pendingDeleteIds.length === 1 ? 'this audit event' : `${pendingDeleteIds.length} audit events`}?
+            </h3>
+            <p className="mt-2 text-sm leading-6 text-slate-600">
+              This permanently removes the selected audit {pendingDeleteIds.length === 1 ? 'record' : 'records'} and cannot be undone.
+            </p>
+            <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={() => setPendingDeleteIds(null)}
+                disabled={deleting}
+                className="rounded-full border border-slate-200 px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void confirmDelete()}
+                disabled={deleting}
+                className="inline-flex items-center justify-center gap-2 rounded-full bg-red-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50"
+              >
+                {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                {deleting ? 'Deleting…' : 'Delete permanently'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }
