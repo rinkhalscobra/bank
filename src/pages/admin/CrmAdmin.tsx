@@ -12,6 +12,7 @@ import {
   Copy,
   CreditCard,
   Database,
+  Download,
   Eye,
   EyeOff,
   Image as ImageIcon,
@@ -5308,15 +5309,25 @@ function KycDocumentsView({
             {path ? <p className="mt-0.5 truncate text-xs text-slate-500" title={path}>{fileName}</p> : null}
           </div>
           {link?.url ? (
-            <a
-              href={link.url}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex shrink-0 items-center gap-2 rounded-full border border-[#006446]/14 px-3 py-1.5 text-xs font-semibold text-[#006446] transition-colors hover:bg-[#006446]/[0.05]"
-            >
-              <Eye className="h-3.5 w-3.5" />
-              Open full size
-            </a>
+            <div className="flex shrink-0 items-center gap-2">
+              <a
+                href={link.url}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-2 rounded-full border border-[#006446]/14 px-3 py-1.5 text-xs font-semibold text-[#006446] transition-colors hover:bg-[#006446]/[0.05]"
+              >
+                <Eye className="h-3.5 w-3.5" />
+                Open
+              </a>
+              <a
+                href={link.url}
+                download={fileName}
+                className="inline-flex items-center gap-2 rounded-full bg-[#006446] px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-[#004d36]"
+              >
+                <Download className="h-3.5 w-3.5" />
+                Download
+              </a>
+            </div>
           ) : null}
         </div>
 
@@ -5349,7 +5360,7 @@ function KycDocumentsView({
     <div className="space-y-5">
       <div className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
         <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-        <p>These are sensitive identity records. Preview links are private and expire automatically after 15 minutes.</p>
+        <p>These sensitive identity records remain private. CRM staff can preview or download them whenever they have access to this customer.</p>
         {loadingDocuments ? <Loader2 className="ml-auto mt-0.5 h-4 w-4 shrink-0 animate-spin" /> : null}
       </div>
 
@@ -5937,19 +5948,26 @@ export default function CrmAdmin() {
     }
 
     let cancelled = false;
+    const objectUrls: string[] = [];
     setLoadingKycDocuments(true);
 
     void Promise.all(paths.map(async (path) => {
       const { data, error } = await supabase.storage
         .from('kyc-documents')
-        .createSignedUrl(path, 15 * 60);
+        .download(path);
+
+      const objectUrl = data ? URL.createObjectURL(data) : null;
+      if (objectUrl) objectUrls.push(objectUrl);
 
       return [path, {
-        url: data?.signedUrl || null,
+        url: objectUrl,
         error: error?.message || null,
       }] as const;
     })).then((entries) => {
-      if (cancelled) return;
+      if (cancelled) {
+        objectUrls.forEach((url) => URL.revokeObjectURL(url));
+        return;
+      }
       setKycDocumentLinks(Object.fromEntries(entries));
       setLoadingKycDocuments(false);
     }).catch((error: unknown) => {
@@ -5961,6 +5979,7 @@ export default function CrmAdmin() {
 
     return () => {
       cancelled = true;
+      objectUrls.forEach((url) => URL.revokeObjectURL(url));
     };
   }, [selectedUserId, tableData.kyc_submissions]);
 

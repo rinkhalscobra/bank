@@ -1,9 +1,9 @@
 /*
   Allow CRM staff to preview KYC files for customers inside their managed scope.
 
-  The bucket remains private. Supabase only issues a short-lived signed URL when
-  the authenticated staff member passes both the CRM role/IP check and the
-  existing hierarchy scope check for the user folder that owns the object.
+  The bucket remains private. Authenticated staff can read and download an object
+  only when they pass both the CRM role/IP check and the existing hierarchy scope
+  check for the user folder that owns the object.
 */
 
 DROP POLICY IF EXISTS "Staff can view managed kyc documents" ON storage.objects;
