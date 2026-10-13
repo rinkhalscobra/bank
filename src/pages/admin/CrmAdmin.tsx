@@ -103,6 +103,11 @@ type AdminRow = {
   [key: string]: unknown;
 };
 
+type KycDocumentLink = {
+  url: string | null;
+  error: string | null;
+};
+
 type TransactionSourceTable = 'transactions' | 'crypto_transactions';
 type TransferSourceTable = 'bank_transfers' | 'crypto_transfers';
 type ActivitySourceTable = TransactionSourceTable | TransferSourceTable;
@@ -305,6 +310,16 @@ type TableConfig = {
 
 const USER_TABLES: TableConfig[] = [
   { name: 'transactions', label: 'Transactions', icon: Wallet, scope: 'user', filterColumn: 'user_id' },
+  {
+    name: 'kyc_submissions',
+    label: 'KYC Documents',
+    description: 'Review the identity details and private document images submitted by this customer.',
+    icon: ImageIcon,
+    scope: 'user',
+    filterColumn: 'user_id',
+    orderColumn: 'submitted_at',
+    timestampColumn: 'submitted_at',
+  },
   { name: 'fiat_balances', label: 'Fiat Balances', icon: Landmark, scope: 'user', filterColumn: 'user_id' },
   { name: 'crypto_balances', label: 'Crypto Balances', icon: Landmark, scope: 'user', filterColumn: 'user_id' },
   { name: 'cards', label: 'Cards', icon: CreditCard, scope: 'user', filterColumn: 'user_id' },
@@ -671,6 +686,10 @@ function isInteracTransfersTable(tableName?: string | null) {
 
 function isWalletsTable(tableName?: string | null) {
   return tableName === WALLETS_TABLE_NAME;
+}
+
+function isKycDocumentsTable(tableName?: string | null) {
+  return tableName === 'kyc_submissions';
 }
 
 function getDataTableConfig(tableName: string) {
@@ -5267,6 +5286,137 @@ function WalletCreateCard({
   );
 }
 
+function KycDocumentsView({
+  rows,
+  documentLinks,
+  loadingDocuments,
+}: {
+  rows: AdminRow[];
+  documentLinks: Record<string, KycDocumentLink>;
+  loadingDocuments: boolean;
+}) {
+  const renderDocument = (row: AdminRow, field: 'id_front_url' | 'id_back_url' | 'selfie_url', label: string) => {
+    const path = typeof row[field] === 'string' ? row[field].trim() : '';
+    const link = path ? documentLinks[path] : undefined;
+    const fileName = path.split('/').pop() || path;
+
+    return (
+      <article key={field} className="overflow-hidden rounded-2xl border border-[#006446]/12 bg-white">
+        <div className="flex items-center justify-between gap-3 border-b border-[#006446]/10 px-4 py-3">
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-slate-900">{label}</p>
+            {path ? <p className="mt-0.5 truncate text-xs text-slate-500" title={path}>{fileName}</p> : null}
+          </div>
+          {link?.url ? (
+            <a
+              href={link.url}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex shrink-0 items-center gap-2 rounded-full border border-[#006446]/14 px-3 py-1.5 text-xs font-semibold text-[#006446] transition-colors hover:bg-[#006446]/[0.05]"
+            >
+              <Eye className="h-3.5 w-3.5" />
+              Open full size
+            </a>
+          ) : null}
+        </div>
+
+        {!path ? (
+          <div className="flex min-h-48 items-center justify-center bg-slate-50 px-5 text-center text-sm text-slate-500">
+            Not supplied for this document type.
+          </div>
+        ) : !link ? (
+          <div className="flex min-h-48 items-center justify-center bg-slate-50">
+            <Loader2 className="h-6 w-6 animate-spin text-[#006446]" />
+          </div>
+        ) : link?.url ? (
+          <a href={link.url} target="_blank" rel="noreferrer" className="block bg-slate-50">
+            <img
+              src={link.url}
+              alt={`${label} submitted for KYC verification`}
+              className="h-64 w-full object-contain"
+            />
+          </a>
+        ) : (
+          <div className="flex min-h-48 items-center justify-center bg-red-50 px-5 text-center text-sm text-red-700">
+            {link?.error || 'This private document could not be opened.'}
+          </div>
+        )}
+      </article>
+    );
+  };
+
+  return (
+    <div className="space-y-5">
+      <div className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+        <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+        <p>These are sensitive identity records. Preview links are private and expire automatically after 15 minutes.</p>
+        {loadingDocuments ? <Loader2 className="ml-auto mt-0.5 h-4 w-4 shrink-0 animate-spin" /> : null}
+      </div>
+
+      {rows.map((row, index) => {
+        const submittedAt = formatDayMonthYear(row.submitted_at);
+        const reviewedAt = formatDayMonthYear(row.reviewed_at);
+        const address = [row.address_line1, row.address_line2, row.city, row.state, row.postal_code, row.country]
+          .filter((value) => typeof value === 'string' && value.trim())
+          .join(', ');
+        const detailItems = [
+          ['Date of birth', formatDayMonthYear(row.date_of_birth) || 'Not supplied'],
+          ['Nationality', formatValue(row.nationality)],
+          ['ID type', toSentenceCase(String(row.id_type || 'Not supplied'))],
+          ['ID number', formatValue(row.id_number)],
+          ['Address', address || 'Not supplied'],
+          ['Submitted', submittedAt || formatValue(row.submitted_at)],
+          ['Reviewed', reviewedAt || 'Not reviewed'],
+        ];
+
+        return (
+          <section key={row.id} className="overflow-hidden rounded-[28px] border border-[#006446]/14 bg-white shadow-[0_24px_60px_-48px_rgba(0,100,70,0.45)]">
+            <div className="flex flex-col gap-3 border-b border-[#006446]/10 bg-gradient-to-r from-[#006446]/[0.12] via-[#006446]/[0.04] to-white px-5 py-5 sm:flex-row sm:items-start sm:justify-between sm:px-6">
+              <div className="flex items-start gap-4">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[#006446] text-white">
+                  <ImageIcon className="h-5 w-5" />
+                </div>
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[#006446]">KYC submission {rows.length - index}</p>
+                  <h3 className="mt-1 text-xl font-serif font-bold text-slate-950">Identity verification documents</h3>
+                  <p className="mt-1 text-sm text-slate-500">Submitted {submittedAt || 'date unavailable'}</p>
+                </div>
+              </div>
+              <span className="inline-flex w-fit rounded-full border border-[#006446]/14 bg-white px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-[#006446]">
+                {reviewedAt ? 'Reviewed' : 'Awaiting review'}
+              </span>
+            </div>
+
+            <div className="space-y-5 p-4 sm:p-6">
+              <dl className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                {detailItems.map(([label, value]) => (
+                  <div key={label} className={`rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3 ${label === 'Address' ? 'sm:col-span-2' : ''}`}>
+                    <dt className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">{label}</dt>
+                    <dd className="mt-1 break-words text-sm font-medium text-slate-900">{value}</dd>
+                  </div>
+                ))}
+              </dl>
+
+              <div className="grid gap-4 lg:grid-cols-3">
+                {renderDocument(row, 'id_front_url', 'ID front')}
+                {renderDocument(row, 'id_back_url', 'ID back')}
+                {renderDocument(row, 'selfie_url', 'Verification selfie')}
+              </div>
+
+              {typeof row.review_notes === 'string' && row.review_notes.trim() ? (
+                <div className="rounded-2xl border border-[#006446]/12 bg-[#006446]/[0.03] px-4 py-3">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[#006446]">Review notes</p>
+                  <p className="mt-1 whitespace-pre-wrap text-sm text-slate-700">{row.review_notes}</p>
+                </div>
+              ) : null}
+            </div>
+          </section>
+        );
+      })}
+    </div>
+  );
+}
+
 function CreateRecordCard({
   table,
   fields,
@@ -5403,6 +5553,8 @@ export default function CrmAdmin() {
   const [tableErrors, setTableErrors] = useState<Record<string, string | null>>({});
   const [loadingProfiles, setLoadingProfiles] = useState(true);
   const [loadingTables, setLoadingTables] = useState(false);
+  const [kycDocumentLinks, setKycDocumentLinks] = useState<Record<string, KycDocumentLink>>({});
+  const [loadingKycDocuments, setLoadingKycDocuments] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
   const [createUserDialogOpen, setCreateUserDialogOpen] = useState(false);
   const [creatingUser, setCreatingUser] = useState(false);
@@ -5716,6 +5868,7 @@ export default function CrmAdmin() {
   const isBalancesView = isBalancesTable(activeConfig?.name);
   const isTaxesView = isTaxesTable(activeConfig?.name);
   const isWalletsView = isWalletsTable(activeConfig?.name);
+  const isKycDocumentsView = isKycDocumentsTable(activeConfig?.name);
   const isExchangeControlView = activeConfig?.name === 'currency_exchanges';
   const activityTransactionRows = useMemo(
     () => activityRows.filter((row) => row.__record_type === 'transaction'),
@@ -5767,6 +5920,49 @@ export default function CrmAdmin() {
   useEffect(() => {
     setBalanceStatusDraft(customerBalanceStatus);
   }, [customerBalanceStatus, selectedUserId]);
+
+  useEffect(() => {
+    const rows = tableData.kyc_submissions || [];
+    const paths = Array.from(new Set(
+      rows.flatMap((row) => ['id_front_url', 'id_back_url', 'selfie_url']
+        .map((field) => typeof row[field] === 'string' ? row[field].trim() : '')
+        .filter((path) => path && path.startsWith(`${selectedUserId}/`)))
+    ));
+
+    setKycDocumentLinks({});
+
+    if (!selectedUserId || paths.length === 0) {
+      setLoadingKycDocuments(false);
+      return;
+    }
+
+    let cancelled = false;
+    setLoadingKycDocuments(true);
+
+    void Promise.all(paths.map(async (path) => {
+      const { data, error } = await supabase.storage
+        .from('kyc-documents')
+        .createSignedUrl(path, 15 * 60);
+
+      return [path, {
+        url: data?.signedUrl || null,
+        error: error?.message || null,
+      }] as const;
+    })).then((entries) => {
+      if (cancelled) return;
+      setKycDocumentLinks(Object.fromEntries(entries));
+      setLoadingKycDocuments(false);
+    }).catch((error: unknown) => {
+      if (cancelled) return;
+      const message = error instanceof Error ? error.message : 'KYC document previews could not be loaded.';
+      setKycDocumentLinks(Object.fromEntries(paths.map((path) => [path, { url: null, error: message }])));
+      setLoadingKycDocuments(false);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedUserId, tableData.kyc_submissions]);
 
   const activeRows = activeConfig
     ? isActivityView
@@ -8639,7 +8835,7 @@ export default function CrmAdmin() {
                           >
                             <span className="block font-semibold">{table.label}</span>
                             <span className={`mt-1 block text-xs ${isActiveTable ? 'text-white/80' : 'text-slate-500'}`}>
-                              {table.scope === 'global' ? 'Global table' : table.name === 'taxes' ? '3 cards' : `${rowCount} rows`}
+                              {table.scope === 'global' ? 'Global table' : table.name === 'taxes' ? '3 cards' : isKycDocumentsTable(table.name) ? `${rowCount} submissions` : `${rowCount} rows`}
                             </span>
                           </button>
                         );
@@ -8673,7 +8869,7 @@ export default function CrmAdmin() {
                     </div>
 
                     <div className="flex flex-col gap-3 sm:flex-row">
-                      {!isTaxesView && !isInteracTransfersView && (
+                      {!isTaxesView && !isInteracTransfersView && !isKycDocumentsView && (
                         <button
                           type="button"
                           onClick={handleStartCreateRecord}
@@ -8690,7 +8886,7 @@ export default function CrmAdmin() {
                         className="inline-flex items-center justify-center gap-2 rounded-full border border-[#006446]/12 px-4 py-2 text-sm font-medium text-[#006446] transition-colors hover:bg-[#006446]/[0.05]"
                       >
                         <RefreshCw className={`h-4 w-4 ${refreshingTable === activeConfig.name ? 'animate-spin' : ''}`} />
-                        {isActivityView ? 'Refresh activity' : isBalancesView ? 'Refresh balances' : isTaxesView ? 'Refresh taxes' : isWalletsView ? 'Refresh wallets' : isTransactionsView ? 'Refresh transactions' : isTransfersView ? 'Refresh transfers' : isInteracTransfersView ? 'Refresh Interac transfers' : `Refresh ${activeConfig.label}`}
+                        {isActivityView ? 'Refresh activity' : isBalancesView ? 'Refresh balances' : isTaxesView ? 'Refresh taxes' : isKycDocumentsView ? 'Refresh KYC documents' : isWalletsView ? 'Refresh wallets' : isTransactionsView ? 'Refresh transactions' : isTransfersView ? 'Refresh transfers' : isInteracTransfersView ? 'Refresh Interac transfers' : `Refresh ${activeConfig.label}`}
                       </button>
                     </div>
                   </div>
@@ -8701,7 +8897,7 @@ export default function CrmAdmin() {
                   </div>
                 )}
 
-                {!isExchangeControlView && isAddingRecord && !isTaxesView && !isInteracTransfersView && (
+                {!isExchangeControlView && isAddingRecord && !isTaxesView && !isInteracTransfersView && !isKycDocumentsView && (
                   isActivityView ? (
                     activityCreatePanel ? null : (
                       <ActivityCreateCard
@@ -8820,6 +9016,8 @@ export default function CrmAdmin() {
                         ? 'This customer does not have any fiat or crypto balances yet.'
                         : isTaxesView
                         ? 'This customer does not have any tax records yet.'
+                        : isKycDocumentsView
+                        ? 'This customer has not submitted identity documents yet.'
                         : isWalletsView
                         ? 'This customer does not have any crypto or tax wallets yet.'
                         : isTransfersView
@@ -8830,7 +9028,7 @@ export default function CrmAdmin() {
                         ? 'This global table is empty right now.'
                         : 'The selected user has no records in this table yet.'}
                     </p>
-                    {!isAddingRecord && (
+                    {!isAddingRecord && !isKycDocumentsView && (
                       <button
                         type="button"
                         onClick={handleStartCreateRecord}
@@ -9262,6 +9460,12 @@ export default function CrmAdmin() {
                           </div>
                         ) : null}
                       </div>
+                    ) : isKycDocumentsView ? (
+                      <KycDocumentsView
+                        rows={activeRows}
+                        documentLinks={kycDocumentLinks}
+                        loadingDocuments={loadingKycDocuments}
+                      />
                     ) : isTaxesView ? (
                       renderTaxesAdminView()
                     ) : (
